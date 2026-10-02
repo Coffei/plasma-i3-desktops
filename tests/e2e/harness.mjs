@@ -341,6 +341,21 @@ class Kwin {
     });
   }
 
+  /** Moves a virtual output, e.g. below another one, through output management. */
+  async setOutputPosition(name, x, y) {
+    await execFileAsync("kscreen-doctor", [`output.${name}.position.${x},${y}`], {
+      env: this.clientEnv(),
+      timeout: 20000,
+    });
+    await this.waitFor(
+      async () => {
+        const output = (await this.state()).outputs.find((o) => o.name === name);
+        return output.geometry.x === x && output.geometry.y === y;
+      },
+      { message: `${name} did not move to ${x},${y}` },
+    );
+  }
+
   /**
    * Makes KWin calls through the actions probe (see probes/actions.qml) and
    * waits until they have been made.

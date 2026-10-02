@@ -98,6 +98,19 @@ Item {
         reconcile();
     }
 
+    // Spec 5.3, `Meta+Ctrl+arrow`.
+    function moveWorkspace(direction) {
+        if (!active) {
+            return;
+        }
+        reconcile();
+        const result = Workspaces.moveWorkspace(workspaceModel, takeSnapshot(), direction);
+        debug("move workspace " + direction + (result.actions.length ? "" : ": nothing to do"));
+        workspaceModel = result.model;
+        apply(result.actions);
+        reconcile();
+    }
+
     // Window signals the model depends on; KWin drops the connections when
     // the window goes away.
     function watch(window) {
@@ -123,6 +136,9 @@ Item {
             const desktop = desktopWithId(action.desktop);
             debug("moving window " + action.window + " to workspace " + desktop.x11DesktopNumber);
             windowWithId(action.window).desktops = [desktop];
+        } else if (action.type === "sendToOutput") {
+            debug("moving window " + action.window + " to " + action.output);
+            Workspace.sendClientToScreen(windowWithId(action.window), outputNamed(action.output));
         } else if (action.type === "focusOutput") {
             focusOutput(action.output, action.warp);
         } else if (action.type === "warn") {
@@ -252,6 +268,40 @@ Item {
             text: "i3 Desktops: Switch to workspace " + number
             sequence: "Meta+" + number % 10
             onActivated: root.switchToWorkspace(number)
+        }
+    }
+
+    Instantiator {
+        model: [
+            {
+                direction: "left",
+                key: "Left",
+                where: "on the left"
+            },
+            {
+                direction: "right",
+                key: "Right",
+                where: "on the right"
+            },
+            {
+                direction: "up",
+                key: "Up",
+                where: "above"
+            },
+            {
+                direction: "down",
+                key: "Down",
+                where: "below"
+            }
+        ]
+
+        delegate: ShortcutHandler {
+            required property var modelData
+
+            name: "plasma-i3-desktops: Move workspace to the monitor " + modelData.where
+            text: "i3 Desktops: Move workspace to the monitor " + modelData.where
+            sequence: "Meta+Ctrl+" + modelData.key
+            onActivated: root.moveWorkspace(modelData.direction)
         }
     }
 

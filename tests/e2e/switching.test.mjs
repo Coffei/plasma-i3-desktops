@@ -5,35 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sleep, startKwin } from "./harness.mjs";
 import { locations, shownDesktops } from "./state.mjs";
-
-function switchTo(kwin, number) {
-  return kwin.invokeShortcut(`plasma-i3-desktops: Switch to workspace ${number}`);
-}
-
-async function waitForShown(kwin, expected) {
-  return kwin.waitFor(
-    async () => {
-      const state = await kwin.state();
-      return JSON.stringify(shownDesktops(state)) === JSON.stringify(expected) && state;
-    },
-    { message: `outputs did not show ${JSON.stringify(expected)}` },
-  );
-}
-
-async function waitForCursor(kwin, point) {
-  return kwin.waitFor(
-    async () => {
-      const state = await kwin.state();
-      const { x, y } = state.cursor;
-      return Math.abs(x - point.x) <= 1 && Math.abs(y - point.y) <= 1 && state;
-    },
-    { message: `pointer did not reach ${JSON.stringify(point)}` },
-  );
-}
-
-function centre(rect) {
-  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-}
+import { centre, switchTo, waitForCursor, waitForShown } from "./workspaces.mjs";
 
 /**
  * Window A focused on Virtual-0 (workspace 1) with the pointer on it, window B

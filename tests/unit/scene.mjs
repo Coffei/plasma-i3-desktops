@@ -4,14 +4,19 @@
  * `shown` maps output names to the desktop number they show, in screen order.
  * Windows are `{id, desktop, output}` plus any snapshot flags to override;
  * desktops are numbered 1…`desktops` with ids `d1`…; output keys equal names.
+ * Outputs are 1920×1080 side by side unless `layout` maps names to
+ * `[x, y, width, height]`.
  */
-export function scene({ shown, windows = [], active, desktops = 10 }) {
+export function scene({ shown, windows = [], active, desktops = 10, layout = {} }) {
   const names = Object.keys(shown);
   return {
     activeScreen: active ?? names[0],
     cursor: { x: 0, y: 0 },
     screenOrder: names,
-    outputs: names.map((name) => ({ name, key: name, desktop: `d${shown[name]}` })),
+    outputs: names.map((name, index) => {
+      const [x, y, width, height] = layout[name] ?? [index * 1920, 0, 1920, 1080];
+      return { name, key: name, geometry: { x, y, width, height }, desktop: `d${shown[name]}` };
+    }),
     desktops: Array.from({ length: desktops }, (_, i) => ({
       id: `d${i + 1}`,
       number: i + 1,

@@ -254,11 +254,16 @@ Let F = the focused output, W = workspace shown on F, T = the neighbour of F in
 direction D (6.5). If there is no neighbour, do nothing.
 1. T shows W. This must happen before step 2, otherwise KWin moves the windows
    to T's current desktop (§3).
-2. Move all managed windows of W from F to T (`sendClientToScreen`). Clamp
-   non-maximized windows into T's work area if they would end up off-screen.
+2. Move all managed windows of W from F to T (`sendClientToScreen`),
+   minimized ones too. KWin keeps a window that was inside F inside T
+   (`moveToArea`, `src/window.cpp:3838`) and moves dialogs along with their
+   parent, so nothing needs clamping.
 3. `location[W] = home[W] = T` (an explicit move resets home).
-4. What F shows afterwards is decided by 6.2.
-5. Focus follows the workspace to T and the pointer is warped (6.1).
+4. What F shows afterwards is decided by 6.2; the workspace T showed before
+   counts as free once it is hidden and empty. If F would have nothing to show
+   (6.10), nothing moves and the script warns.
+5. Focus follows the workspace to T and the pointer is warped (6.1): to the
+   focused window's centre, or to T's centre if W has no visible window.
 
 ### 5.4 Monitor unplugged
 Debounce: act only after outputs have been stable for ~750 ms (6.7).

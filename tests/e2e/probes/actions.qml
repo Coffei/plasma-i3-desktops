@@ -47,6 +47,8 @@ Item {
             Workspace.sendClientToScreen(windowTitled(action.sendToScreen.caption), outputNamed(action.sendToScreen.output));
         } else if (action.setDesktops) {
             windowTitled(action.setDesktops.caption).desktops = action.setDesktops.desktops.map(desktop);
+        } else if (action.minimize !== undefined) {
+            windowTitled(action.minimize).minimized = true;
         } else if (action.setGeometry) {
             const g = action.setGeometry.geometry;
             windowTitled(action.setGeometry.caption).frameGeometry = Qt.rect(g.x, g.y, g.width, g.height);

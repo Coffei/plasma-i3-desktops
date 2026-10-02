@@ -10,10 +10,14 @@
 // Actions:
 //   {type: "show", desktop, output}   show a desktop on an output (by name)
 //   {type: "adopt", window, desktop}  move a window to another desktop
+//   {type: "sendToOutput", window, output}
+//                                     move a window to another output
 //   {type: "focusOutput", output, warp}
 //                                     focus an output and move the pointer to
 //                                     the focused "window" or the output's "centre"
 //   {type: "warn", text}              something the user should know about
+
+import { neighbour } from "./outputs.mjs";
 
 export function emptyModel() {
   return { location: {}, home: {}, previous: {} };
@@ -154,6 +158,57 @@ export function switchTo(model, snapshot, number) {
   return actions;
 }
 
+/**
+ * Plans moving the focused output's workspace, with its windows, to the
+ * neighbouring output in `direction` (spec 5.3).
+ *
+ * The workspace is shown on the neighbour before its windows move there, so
+ * that KWin keeps them on it. The output left behind shows what it showed
+ * before if that still lives there, else a free workspace; without one,
+ * nothing moves. Focus and pointer go with the workspace.
+ */
+export function moveWorkspace(model, snapshot, direction) {
+  const scene = analyse(snapshot);
+  const from = scene.focused;
+  const desktop = scene.shown[from];
+  const to = desktop ? neighbour(snapshot.outputs, from, direction) : null;
+  if (!to) {
+    return { model, actions: [] };
+  }
+
+  const location = Object.assign({}, model.location, { [desktop]: scene.keyOf[to] });
+  const shown = Object.assign({}, scene.shown, { [to]: desktop });
+  delete shown[from];
+  const hidden = scene.shown[to];
+  if (!scene.windowCounts[hidden]) {
+    delete location[hidden];
+  }
+  const replacement = replacementFor(model, snapshot, scene.outputNamed[from], location, shown);
+  if (!replacement) {
+    return {
+      model,
+      actions: [{ type: "warn", text: `no free workspace for ${from}, so nothing moves` }],
+    };
+  }
+  location[replacement] = scene.keyOf[from];
+
+  const windows = scene.managed.filter((w) => w.desktops[0] === desktop && w.output === from);
+  const actions = [{ type: "show", desktop, output: to }]
+    .concat(windows.map((w) => ({ type: "sendToOutput", window: w.id, output: to })))
+    .concat([
+      { type: "show", desktop: replacement, output: from },
+      {
+        type: "focusOutput",
+        output: to,
+        warp: windows.some((w) => !w.minimized) ? "window" : "centre",
+      },
+    ]);
+  return {
+    model: Object.assign({}, model, { location, home: Object.assign({}, location) }),
+    actions,
+  };
+}
+
 function locate(model, scene, desktop) {
   const counts = scene.windowCounts[desktop];
   const showing = scene.showing[desktop] ?? [];
@@ -199,12 +254,14 @@ function analyse(snapshot) {
     .sort((a, b) => (order.get(a.name) ?? Infinity) - (order.get(b.name) ?? Infinity));
   const keyOf = {};
   const nameOf = {};
+  const outputNamed = {};
   const shown = {};
   const showing = {};
   // No `??=`: KWin's JavaScript engine is older than that.
   for (const output of outputsInOrder) {
     keyOf[output.name] = output.key;
     nameOf[output.key] = output.name;
+    outputNamed[output.name] = output;
     if (output.desktop) {
       shown[output.name] = output.desktop;
       showing[output.desktop] = (showing[output.desktop] ?? []).concat(output.name);
@@ -222,6 +279,7 @@ function analyse(snapshot) {
     outputsInOrder,
     keyOf,
     nameOf,
+    outputNamed,
     connectedKeys: new Set(Object.values(keyOf)),
     shown,
     showing,

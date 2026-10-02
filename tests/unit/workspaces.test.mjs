@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import {
   emptyModel,
   isManaged,
+  moveWorkspace,
   rebuild,
   reconcile,
   recordSwitch,
@@ -345,5 +346,124 @@ describe("switchTo", () => {
     const model = modelWith({ d1: "A", d2: "B", d3: "C" });
 
     assert.deepEqual(switchTo(model, snapshot, 3), [show("d3", "A")]);
+  });
+});
+
+describe("moveWorkspace", () => {
+  const show = (desktop, output) => ({ type: "show", desktop, output });
+  const send = (window, output) => ({ type: "sendToOutput", window, output });
+  const focus = (output, warp) => ({ type: "focusOutput", output, warp });
+
+  test("moves the workspace and its windows to the neighbour, and focus with them", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [
+        { id: "w1", desktop: 1, output: "A" },
+        { id: "w2", desktop: 1, output: "A", minimized: true },
+        { id: "w3", desktop: 2, output: "B" },
+      ],
+    });
+
+    const { model, actions } = moveWorkspace(modelWith({ d1: "A", d2: "B" }), snapshot, "right");
+
+    assert.deepEqual(actions, [
+      show("d1", "B"),
+      send("w1", "B"),
+      send("w2", "B"),
+      show("d3", "A"),
+      focus("B", "window"),
+    ]);
+    assert.deepEqual(model.location, { d1: "B", d2: "B", d3: "A" });
+    assert.deepEqual(model.home, model.location);
+  });
+
+  test("the output left behind shows its previous workspace if it still lives there", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [
+        { id: "w1", desktop: 1, output: "A" },
+        { id: "w4", desktop: 4, output: "A" },
+      ],
+    });
+
+    const model = modelWith({ d1: "A", d2: "B", d4: "A" }, { A: "d4" });
+
+    const { actions } = moveWorkspace(model, snapshot, "right");
+
+    assert.deepEqual(actions.at(-2), show("d4", "A"));
+  });
+
+  test("an empty workspace the neighbour hid becomes free for the output left behind", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [{ id: "w1", desktop: 1, output: "A" }],
+    });
+
+    const { model, actions } = moveWorkspace(modelWith({ d1: "A", d2: "B" }), snapshot, "right");
+
+    assert.deepEqual(actions.at(-2), show("d2", "A"));
+    assert.deepEqual(model.location, { d1: "B", d2: "A" });
+  });
+
+  test("moves an empty workspace, focusing the neighbour's centre", () => {
+    const snapshot = scene({ shown: { A: 1, B: 2 } });
+
+    const { actions } = moveWorkspace(modelWith({ d1: "A", d2: "B" }), snapshot, "right");
+
+    assert.deepEqual(actions, [show("d1", "B"), show("d2", "A"), focus("B", "centre")]);
+  });
+
+  test("leaves unmanaged windows where they are", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [{ id: "panel", desktop: 1, output: "A", dock: true }],
+    });
+
+    const { actions } = moveWorkspace(modelWith({ d1: "A", d2: "B" }), snapshot, "right");
+
+    assert.equal(
+      actions.some((a) => a.type === "sendToOutput"),
+      false,
+    );
+  });
+
+  test("does nothing without a neighbour in that direction", () => {
+    const snapshot = scene({ shown: { A: 1, B: 2 } });
+    const model = modelWith({ d1: "A", d2: "B" });
+
+    for (const direction of ["left", "up", "down"]) {
+      assert.deepEqual(moveWorkspace(model, snapshot, direction), { model, actions: [] });
+    }
+  });
+
+  test("moves down to an output below", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      layout: { A: [0, 0, 1920, 1080], B: [0, 1080, 1920, 1080] },
+    });
+
+    const { actions } = moveWorkspace(modelWith({ d1: "A", d2: "B" }), snapshot, "down");
+
+    assert.deepEqual(actions[0], show("d1", "B"));
+  });
+
+  test("moves nothing when the output left behind would have nothing to show", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      desktops: 2,
+      windows: [
+        { id: "w1", desktop: 1, output: "A" },
+        { id: "w2", desktop: 2, output: "B" },
+      ],
+    });
+    const model = modelWith({ d1: "A", d2: "B" });
+
+    const result = moveWorkspace(model, snapshot, "right");
+
+    assert.equal(result.model, model);
+    assert.deepEqual(
+      result.actions.map((a) => a.type),
+      ["warn"],
+    );
   });
 });
