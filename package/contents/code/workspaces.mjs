@@ -99,23 +99,29 @@ export function reconcile(model, snapshot) {
 }
 
 /**
- * Brings the model in line with outputs that came or went (spec 5.4).
+ * Brings the model in line with outputs that came or went (spec 5.4, 5.5).
  *
+ * `knownKeys` are the keys of the outputs the model was last in line with.
  * Workspaces of a removed output move to the focused output, or the first in
- * screen order, and keep the removed one as their home. Every window then
- * goes to where its workspace lives: KWin spreads the windows of a removed
- * output over the nearest ones, and replaces the desktop of a window it moves
- * to an output not showing it, so the desktop is set again.
+ * screen order, and keep the removed one as their home; workspaces whose home
+ * came back move there again. Every window then goes to where its workspace
+ * lives: KWin spreads the windows of a removed output over the nearest ones
+ * and puts them back when it returns, also windows whose workspace has moved
+ * meanwhile. It replaces the desktop of a window it moves to an output not
+ * showing it, so the desktop is set again.
  */
-export function outputsChanged(model, snapshot) {
+export function outputsChanged(model, snapshot, knownKeys) {
   const scene = analyse(snapshot);
   const fallback = scene.keyOf[scene.focused] ?? scene.outputsInOrder[0]?.key;
   if (!fallback) {
     return { model, actions: [] };
   }
+  const added = new Set(Array.from(scene.connectedKeys).filter((key) => !knownKeys.includes(key)));
   const location = Object.assign({}, model.location);
   for (const desktop of Object.keys(location)) {
-    if (!scene.connectedKeys.has(location[desktop])) {
+    if (added.has(model.home[desktop])) {
+      location[desktop] = model.home[desktop];
+    } else if (!scene.connectedKeys.has(location[desktop])) {
       location[desktop] = fallback;
     }
   }

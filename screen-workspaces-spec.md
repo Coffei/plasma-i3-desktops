@@ -288,10 +288,9 @@ After the debounce, for each newly connected output X:
    to X whose workspace now lives elsewhere (moved by 5.3 while X was away);
    send those back to their workspace's location. After every
    `sendClientToScreen`, set `window.desktops` back to the workspace.
-2. X shows `lastShown[X]` if that workspace now lives on X; else the
-   lowest-numbered workspace living on X; else a free workspace (6.2). KWin
-   already shows `lastShown[X]` again by itself (§3), so usually nothing
-   changes here.
+2. KWin shows on X what X showed before it was unplugged (§3). If that
+   workspace no longer lives on X, X switches per 6.2: its previous workspace,
+   else the lowest-numbered one living on X, else a free one.
 3. Any output that was showing a workspace which just left needs a new one (6.2).
 4. Brand-new outputs with no history just get a free workspace.
 5. Do **not** move focus or the pointer to the new monitor.

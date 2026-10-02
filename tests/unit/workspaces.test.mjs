@@ -580,29 +580,91 @@ describe("outputsChanged", () => {
   const beforeUnplug = modelWith({ d1: "A", d2: "B", d3: "B", d4: "C" });
 
   test("moves a removed output's workspaces to the focused one, keeping their home", () => {
-    const { model } = outputsChanged(beforeUnplug, afterUnplug());
+    const { model } = outputsChanged(beforeUnplug, afterUnplug(), ["A", "B", "C"]);
 
     assert.deepEqual(model.location, { d1: "A", d2: "A", d3: "A", d4: "C" });
     assert.deepEqual(model.home, { d1: "A", d2: "B", d3: "B", d4: "C" });
   });
 
   test("gathers their windows there and gives them their workspace back", () => {
-    const { actions } = outputsChanged(beforeUnplug, afterUnplug());
+    const { actions } = outputsChanged(beforeUnplug, afterUnplug(), ["A", "B", "C"]);
 
     assert.deepEqual(actions, [send("w3", "A"), adopt("w3", "d3")]);
   });
 
   test("uses the focused output, whichever it is", () => {
-    const { model, actions } = outputsChanged(beforeUnplug, afterUnplug("C"));
+    const { model, actions } = outputsChanged(beforeUnplug, afterUnplug("C"), ["A", "B", "C"]);
 
     assert.deepEqual(model.location, { d1: "A", d2: "C", d3: "C", d4: "C" });
     assert.deepEqual(actions, [send("w2", "C"), adopt("w2", "d2")]);
   });
 
   test("falls back to the first output in screen order without a focused one", () => {
-    const { model } = outputsChanged(beforeUnplug, afterUnplug(null));
+    const { model } = outputsChanged(beforeUnplug, afterUnplug(null), ["A", "B", "C"]);
 
     assert.equal(model.location.d2, "A");
+  });
+
+  // B came back: KWin restored w2 there, but not w3, opened while B was away.
+  const afterReplug = () =>
+    scene({
+      shown: { A: 1, B: 2, C: 4 },
+      windows: [
+        { id: "w1", desktop: 1, output: "A" },
+        { id: "w2", desktop: 2, output: "B" },
+        { id: "w3", desktop: 3, output: "A" },
+        { id: "w4", desktop: 4, output: "C" },
+      ],
+    });
+  const whileUnplugged = {
+    location: { d1: "A", d2: "A", d3: "A", d4: "C" },
+    home: { d1: "A", d2: "B", d3: "B", d4: "C" },
+    previous: {},
+  };
+
+  test("brings workspaces back to their returning output, windows and all", () => {
+    const { model, actions } = outputsChanged(whileUnplugged, afterReplug(), ["A", "C"]);
+
+    assert.deepEqual(model.location, { d1: "A", d2: "B", d3: "B", d4: "C" });
+    assert.deepEqual(model.home, whileUnplugged.home);
+    assert.deepEqual(actions, [send("w3", "B"), adopt("w3", "d3")]);
+  });
+
+  test("sends back windows KWin restored for a workspace that moved meanwhile", () => {
+    const moved = {
+      location: { d1: "A", d2: "C", d4: "C" },
+      home: { d1: "A", d2: "C", d4: "C" },
+      previous: {},
+    };
+
+    const { model, actions } = outputsChanged(moved, afterReplug(), ["A", "C"]);
+
+    assert.equal(model.location.d2, "C");
+    assert.deepEqual(actions.slice(0, 2), [send("w2", "C"), adopt("w2", "d2")]);
+  });
+
+  test("moves nothing to a brand-new output", () => {
+    const snapshot = scene({
+      shown: { A: 1, N: 5 },
+      windows: [{ id: "w1", desktop: 1, output: "A" }],
+    });
+    const model = modelWith({ d1: "A" });
+
+    assert.deepEqual(outputsChanged(model, snapshot, ["A"]).actions, []);
+  });
+
+  test("does not bring back a workspace emptied while its output was away", () => {
+    // Workspace 3's last window closed while B was away, so it was forgotten.
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [{ id: "w2", desktop: 2, output: "B" }],
+    });
+    const model = { location: { d1: "A", d2: "A" }, home: { d1: "A", d2: "B" }, previous: {} };
+
+    const result = outputsChanged(model, snapshot, ["A"]);
+
+    assert.deepEqual(result.model.location, { d1: "A", d2: "B" });
+    assert.deepEqual(result.actions, []);
   });
 
   test("changes nothing when no output went away", () => {
@@ -612,6 +674,6 @@ describe("outputsChanged", () => {
     });
     const model = modelWith({ d1: "A", d2: "B" });
 
-    assert.deepEqual(outputsChanged(model, snapshot), { model, actions: [] });
+    assert.deepEqual(outputsChanged(model, snapshot, ["A", "B"]), { model, actions: [] });
   });
 });

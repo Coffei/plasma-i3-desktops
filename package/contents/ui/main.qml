@@ -95,7 +95,7 @@ Item {
         const unchanged = keys.length === knownOutputs.length && keys.every(key => knownOutputs.includes(key));
         debug("outputs settled: " + (unchanged ? "unchanged" : keys.join(", ")));
         if (!unchanged) {
-            const result = Workspaces.outputsChanged(workspaceModel, snapshot);
+            const result = Workspaces.outputsChanged(workspaceModel, snapshot, knownOutputs);
             workspaceModel = result.model;
             knownOutputs = keys;
             apply(result.actions);
