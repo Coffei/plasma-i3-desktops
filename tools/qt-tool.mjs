@@ -3,13 +3,20 @@
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 
-const QT_BIN_DIRS = ["/usr/lib64/qt6/bin", "/usr/lib/qt6/bin", "/usr/lib/x86_64-linux-gnu/qt6/bin"];
+const QT_BIN_DIRS = [
+  "/usr/lib64/qt6/bin",
+  "/usr/lib64/qt6/libexec",
+  "/usr/lib/qt6/bin",
+  "/usr/lib/qt6/libexec",
+  "/usr/lib/x86_64-linux-gnu/qt6/bin",
+  "/usr/lib/x86_64-linux-gnu/qt6/libexec",
+];
 
 /**
  * Finds the Qt 6 tool `name` (e.g. `qml`, `qmlformat`).
  *
  * The environment variable `envVar` wins if set; then PATH is searched for
- * `name6` and `name`; then the usual Qt 6 binary directories.
+ * `name6` and `name`; then the usual Qt 6 bin and libexec directories.
  */
 export function findQtTool(name, envVar) {
   if (envVar && process.env[envVar]) {
