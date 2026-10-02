@@ -4,6 +4,8 @@
 // decision logic will work on. It only reads properties, so tests can pass
 // plain objects in place of KWin's.
 
+import { outputKey } from "./outputs.mjs";
+
 /**
  * Captures outputs, desktops and windows of a KWin `workspace`.
  *
@@ -12,11 +14,12 @@
  * listed bottom to top.
  */
 export function snapshot(workspace, { includeTitles = false } = {}) {
+  const screens = list(workspace.screens);
   return {
     activeScreen: workspace.activeScreen?.name ?? null,
     cursor: point(workspace.cursorPos),
     screenOrder: list(workspace.screenOrder).map((output) => output.name),
-    outputs: list(workspace.screens).map((output) => outputData(workspace, output)),
+    outputs: screens.map((output) => outputData(workspace, output, screens)),
     desktops: list(workspace.desktops).map((desktop, index) => ({
       id: desktop.id,
       number: index + 1,
@@ -27,9 +30,10 @@ export function snapshot(workspace, { includeTitles = false } = {}) {
   };
 }
 
-function outputData(workspace, output) {
+function outputData(workspace, output, screens) {
   return {
     name: output.name,
+    key: outputKey(output, screens),
     manufacturer: output.manufacturer,
     model: output.model,
     serialNumber: output.serialNumber,

@@ -16,6 +16,11 @@ test("dumps outputs and desktops of the running KWin", { timeout: 30000 }, async
       ["Virtual-1", { x: 1920, y: 0, width: 1920, height: 1080 }],
     ],
   );
+  assert.deepEqual(
+    state.outputs.map((o) => o.key),
+    ["Virtual-0", "Virtual-1"],
+    "outputs without EDID data are keyed by connector",
+  );
   assert.deepEqual(state.screenOrder, ["Virtual-0", "Virtual-1"]);
   assert.equal(state.desktops.length, 10);
   const desktopIds = new Set(state.desktops.map((d) => d.id));

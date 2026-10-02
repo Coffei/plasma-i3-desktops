@@ -11,7 +11,12 @@ function fakeWorkspace() {
     serialNumber: "1CR2021B9B",
     geometry: { x: 0, y: 0, width: 1920, height: 1080 },
   };
-  const right = { ...left, name: "DP-2", geometry: { x: 1920, y: 0, width: 1920, height: 1080 } };
+  const right = {
+    ...left,
+    name: "DP-2",
+    serialNumber: "1CR2021XXX",
+    geometry: { x: 1920, y: 0, width: 1920, height: 1080 },
+  };
   const editor = {
     internalId: "{w1}",
     caption: "notes.txt — Kate",
@@ -46,14 +51,15 @@ function fakeWorkspace() {
   };
 }
 
-test("captures outputs with what they show", () => {
+test("captures outputs with their keys and what they show", () => {
   const state = snapshot(fakeWorkspace());
 
   assert.deepEqual(state.outputs[1], {
     name: "DP-2",
+    key: "HP Inc.|HP U28 4K HDR|1CR2021XXX",
     manufacturer: "HP Inc.",
     model: "HP U28 4K HDR",
-    serialNumber: "1CR2021B9B",
+    serialNumber: "1CR2021XXX",
     geometry: { x: 1920, y: 0, width: 1920, height: 1080 },
     desktop: "d2",
   });
