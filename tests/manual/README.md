@@ -43,8 +43,8 @@ setup there is no plasmashell, so keyboard focus stays on the previous window; t
 real session moves it to the empty monitor's desktop.
 
 1. Leave monitor B without windows and open a terminal on monitor A.
-2. In the terminal, run this with B's index (0 or 1; try both if unsure, the pointer does not
-   move):
+2. In the terminal, run this with B's index. It is B's position in KWin's screen order (0 or 1),
+   which need not match left to right; try both if unsure, the pointer does not move:
    ```sh
    gdbus call --session --dest org.kde.kglobalaccel --object-path /component/kwin \
      --method org.kde.kglobalaccel.Component.invokeShortcut "Switch to Screen 1"

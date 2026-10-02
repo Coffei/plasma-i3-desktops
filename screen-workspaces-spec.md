@@ -137,8 +137,8 @@ there.
   afterwards lands there. Activating a window and then `MoveMouseToFocus` puts
   the pointer at the window's centre. Without plasmashell (the e2e setup) an
   empty output has no desktop window, so keyboard focus stays on the previous
-  window; whether a real session focuses the desktop window instead is still
-  to be checked by hand.
+  window; a real session focuses the desktop window instead (checked by hand,
+  below).
 - **Window moves and hotplug** (`kwin-outputs.test.mjs`), with outputs turned
   off and on through `kscreen-doctor`. That stands in for unplugging; DPMS and
   dock bursts are not covered.
@@ -162,11 +162,14 @@ there.
   keeps the order. KWin's own handlers connect before any script and are not
   affected.
 
-### Must be checked by hand (`tests/manual/README.md`)
-- Whether the deferred correction (5.7) visibly flickers or starts a slide on
-  the switched monitor; compare with the synchronous one.
-- Whether focusing an empty monitor with `Switch to Screen` (6.1) moves
-  keyboard focus to its desktop window in a real session.
+### Checked by hand in a real session (`tests/manual/README.md`)
+Plasma 6.7.5, two monitors, *Focus follows mouse*, *Fade Desktop* effect.
+- **Pager correction (5.7):** clicking a desktop on monitor A's pager that is
+  shown on monitor B left A on its desktop without noticeable flicker, both
+  with the deferred and the synchronous correction.
+- **Empty monitor (6.1):** `Switch to Screen <i>` moved keyboard focus to the
+  empty monitor's desktop. The index is the monitor's position in
+  `workspace.screenOrder`, not its position on screen.
 
 ---
 
@@ -305,11 +308,8 @@ windows. It only enforces I3:
   KWin can't be stopped before the switch, only corrected after it. Defer the
   correction with `Qt.callLater`: correcting inside the handler would leave
   other scripts (e.g. a tiling script running alongside) with the wrong desktop
-  (§3). The cost is a possible frame of W on O, or the start of a slide; the
-  manual check (§3) decides whether that is acceptable. Correcting inside the
-  handler avoids it, because no frame is painted in between and the slide
-  effect restarts from its current position
-  (`src/plugins/slide/slide.cpp:463-483`).
+  (§3). In theory this can show a frame of W on O, or start the desktop switch
+  animation; checked by hand, no flicker is noticeable (§3).
 
   The script's own shortcut stays the main path, because it never shows W on
   the wrong output first.
