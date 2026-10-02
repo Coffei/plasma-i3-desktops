@@ -1,0 +1,15 @@
+{
+  "KPackageStructure": "KWin/Script",
+  "KPlugin": {
+    "Category": "Window Management",
+    "Description": "Test only: undoes pager switches to a desktop shown on another monitor",
+    "EnabledByDefault": false,
+    "Id": "plasma-i3-desktops-pager-test",
+    "License": "GPL-3.0-or-later",
+    "Name": "i3 Desktops pager test",
+    "Version": "0.1.0"
+  },
+  "X-Plasma-API": "declarativescript",
+  "X-Plasma-API-Minimum-Version": "6.7",
+  "X-Plasma-MainScript": "ui/main.qml"
+}

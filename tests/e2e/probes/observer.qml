@@ -1,9 +1,11 @@
 // Reports the KWin signals the script reacts to, in the order it receives
-// them, as `{probe: "observer", event, ...}`.
+// them, as `{probe: "observer", event, ...}`; `event: "ready"` once loaded.
 import QtQuick
 import org.kde.kwin
 
 Item {
+    Component.onCompleted: report("ready", {})
+
     function report(event, data) {
         console.info("PI3D_PROBE " + JSON.stringify(Object.assign({
             probe: "observer",

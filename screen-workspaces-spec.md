@@ -154,11 +154,19 @@ there.
     `currentDesktopChanged` signal, so the hotplug handler must read what each
     output shows after `screensChanged`.
   - Virtual outputs have empty manufacturer, model and serial number.
+- **Undoing a Plasma switch** (`kwin-desktop-switch.test.mjs`). Correcting
+  inside `currentDesktopChanged` gives the right end state and leaves no effect
+  running, but scripts connected after ours receive the correction's signal
+  before the switch it corrects (`2->1`, then `1->2`), so they end up believing
+  the wrong desktop is shown. Deferring the correction with `Qt.callLater`
+  keeps the order. KWin's own handlers connect before any script and are not
+  affected.
 
-### Must be verified before relying on them
-- Whether correcting a Plasma switch synchronously inside
-  `currentDesktopChanged` (5.7) is flicker-free, and whether the nested signal
-  it causes confuses anything else in KWin.
+### Must be checked by hand (`tests/manual/README.md`)
+- Whether the deferred correction (5.7) visibly flickers or starts a slide on
+  the switched monitor; compare with the synchronous one.
+- Whether focusing an empty monitor with `Switch to Screen` (6.1) moves
+  keyboard focus to its desktop window in a real session.
 
 ---
 
@@ -294,12 +302,14 @@ windows. It only enforces I3:
   - W is located on P ≠ O → show `previous` on O again, show W on P, focus P
     and warp the pointer. If `previous` is null (new output), pick per 6.2.
 
-  KWin can't be stopped before the switch, only corrected after it. Correct
-  synchronously inside the handler: no frame is painted in between, and the
-  slide effect restarts from its current position, so O should not visibly
-  move (`src/plugins/slide/slide.cpp:463-483`). Verify this in e2e. If the
-  nested `currentDesktopChanged` causes problems, defer the fix with
-  `Qt.callLater` and accept a possible one-frame flicker.
+  KWin can't be stopped before the switch, only corrected after it. Defer the
+  correction with `Qt.callLater`: correcting inside the handler would leave
+  other scripts (e.g. a tiling script running alongside) with the wrong desktop
+  (§3). The cost is a possible frame of W on O, or the start of a slide; the
+  manual check (§3) decides whether that is acceptable. Correcting inside the
+  handler avoids it, because no frame is painted in between and the slide
+  effect restarts from its current position
+  (`src/plugins/slide/slide.cpp:463-483`).
 
   The script's own shortcut stays the main path, because it never shows W on
   the wrong output first.
