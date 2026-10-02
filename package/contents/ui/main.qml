@@ -90,14 +90,18 @@ Item {
         if (!active) {
             return;
         }
-        const keys = takeSnapshot().outputs.map(output => output.key);
+        const snapshot = takeSnapshot();
+        const keys = snapshot.outputs.map(output => output.key);
         const unchanged = keys.length === knownOutputs.length && keys.every(key => knownOutputs.includes(key));
         debug("outputs settled: " + (unchanged ? "unchanged" : keys.join(", ")));
-        if (unchanged) {
-            reconcile();
-        } else {
-            rebuild();
+        if (!unchanged) {
+            const result = Workspaces.outputsChanged(workspaceModel, snapshot);
+            workspaceModel = result.model;
+            knownOutputs = keys;
+            apply(result.actions);
+            debug("workspaces now: " + describeLocations());
         }
+        reconcile();
     }
 
     // Brings the model and KWin back in line after something else changed

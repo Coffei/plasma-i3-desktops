@@ -20,10 +20,19 @@ export function windowTitled(state, caption) {
   return state.windows.find((w) => w.caption === caption);
 }
 
-/** The script's model as desktop number -> output key. */
+/** Where the script's workspaces live, as desktop number -> output key. */
 export function locations(state) {
+  return byNumber(state, state.model.location);
+}
+
+/** Where the script's workspaces want to live, as desktop number -> output key. */
+export function homes(state) {
+  return byNumber(state, state.model.home);
+}
+
+function byNumber(state, map) {
   return Object.fromEntries(
-    Object.entries(state.model.location)
+    Object.entries(map)
       .map(([id, key]) => [desktopNumber(state, id), key])
       .sort(([a], [b]) => a - b),
   );

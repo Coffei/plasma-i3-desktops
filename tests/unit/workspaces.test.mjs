@@ -4,6 +4,7 @@ import {
   emptyModel,
   isManaged,
   moveWorkspace,
+  outputsChanged,
   rebuild,
   reconcile,
   recordSwitch,
@@ -128,6 +129,38 @@ describe("reconcile: locations", () => {
     });
 
     assert.equal(reconcile(emptyModel(), snapshot).model.location.d3, undefined);
+  });
+});
+
+describe("reconcile: homes", () => {
+  test("keeps the home of a workspace living away from it", () => {
+    const snapshot = scene({
+      shown: { A: 1 },
+      windows: [{ id: "w1", desktop: 2, output: "A" }],
+    });
+    const model = { location: { d1: "A", d2: "A" }, home: { d1: "A", d2: "B" }, previous: {} };
+
+    assert.deepEqual(reconcile(model, snapshot).model.home, { d1: "A", d2: "B" });
+  });
+
+  test("keeps the home when the workspace's output is gone", () => {
+    const snapshot = scene({
+      shown: { A: 1 },
+      windows: [{ id: "w1", desktop: 2, output: "A" }],
+    });
+
+    const { model } = reconcile(modelWith({ d1: "A", d2: "B" }), snapshot);
+
+    assert.deepEqual(model.location, { d1: "A", d2: "A" });
+    assert.deepEqual(model.home, { d1: "A", d2: "B" });
+  });
+
+  test("moves the home with a workspace moving between connected outputs", () => {
+    const snapshot = scene({ shown: { A: 1, B: 3 } });
+
+    const { model } = reconcile(modelWith({ d1: "A", d3: "A" }), snapshot);
+
+    assert.equal(model.home.d3, "B");
   });
 });
 
@@ -482,6 +515,20 @@ describe("moveWorkspace", () => {
     }
   });
 
+  test("keeps the homes of other workspaces", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [{ id: "w5", desktop: 5, output: "A" }],
+    });
+    const model = {
+      location: { d1: "A", d2: "B", d5: "A" },
+      home: { d1: "A", d2: "B", d5: "C" },
+      previous: {},
+    };
+
+    assert.equal(moveWorkspace(model, snapshot, "right").model.home.d5, "C");
+  });
+
   test("moves down to an output below", () => {
     const snapshot = scene({
       shown: { A: 1, B: 2 },
@@ -511,5 +558,60 @@ describe("moveWorkspace", () => {
       result.actions.map((a) => a.type),
       ["warn"],
     );
+  });
+});
+
+describe("outputsChanged", () => {
+  const send = (window, output) => ({ type: "sendToOutput", window, output });
+  const adopt = (window, desktop) => ({ type: "adopt", window, desktop });
+  // B was unplugged: its workspaces 2 and 3 lived there, KWin put their
+  // windows on the nearest outputs.
+  const afterUnplug = (active = "A") =>
+    scene({
+      shown: { A: 1, C: 4 },
+      active,
+      windows: [
+        { id: "w1", desktop: 1, output: "A" },
+        { id: "w2", desktop: 2, output: "A" },
+        { id: "w3", desktop: 3, output: "C" },
+        { id: "w4", desktop: 4, output: "C" },
+      ],
+    });
+  const beforeUnplug = modelWith({ d1: "A", d2: "B", d3: "B", d4: "C" });
+
+  test("moves a removed output's workspaces to the focused one, keeping their home", () => {
+    const { model } = outputsChanged(beforeUnplug, afterUnplug());
+
+    assert.deepEqual(model.location, { d1: "A", d2: "A", d3: "A", d4: "C" });
+    assert.deepEqual(model.home, { d1: "A", d2: "B", d3: "B", d4: "C" });
+  });
+
+  test("gathers their windows there and gives them their workspace back", () => {
+    const { actions } = outputsChanged(beforeUnplug, afterUnplug());
+
+    assert.deepEqual(actions, [send("w3", "A"), adopt("w3", "d3")]);
+  });
+
+  test("uses the focused output, whichever it is", () => {
+    const { model, actions } = outputsChanged(beforeUnplug, afterUnplug("C"));
+
+    assert.deepEqual(model.location, { d1: "A", d2: "C", d3: "C", d4: "C" });
+    assert.deepEqual(actions, [send("w2", "C"), adopt("w2", "d2")]);
+  });
+
+  test("falls back to the first output in screen order without a focused one", () => {
+    const { model } = outputsChanged(beforeUnplug, afterUnplug(null));
+
+    assert.equal(model.location.d2, "A");
+  });
+
+  test("changes nothing when no output went away", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [{ id: "w1", desktop: 2, output: "B" }],
+    });
+    const model = modelWith({ d1: "A", d2: "B" });
+
+    assert.deepEqual(outputsChanged(model, snapshot), { model, actions: [] });
   });
 });

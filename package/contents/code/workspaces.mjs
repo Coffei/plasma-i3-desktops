@@ -4,7 +4,8 @@
 // a new model and the actions that bring KWin in line; they never touch KWin.
 // The model is plain data:
 //   location: desktop id -> key of the output the workspace lives on
-//   home:     desktop id -> output key it wants to live on (= location for now)
+//   home:     desktop id -> output key it wants to live on; differs from
+//             location only while its own output is unplugged (spec 5.4)
 //   previous: output key  -> desktop id the output showed before its current one
 //
 // Actions:
@@ -64,10 +65,12 @@ export function recordSwitch(model, outputKey, previousDesktop) {
 export function reconcile(model, snapshot) {
   const scene = analyse(snapshot);
   const location = {};
+  const home = {};
   for (const desktop of snapshot.desktops) {
     const key = locate(model, scene, desktop.id);
     if (key) {
       location[desktop.id] = key;
+      home[desktop.id] = homeOf(model, scene, desktop.id, key);
     }
   }
 
@@ -89,12 +92,46 @@ export function reconcile(model, snapshot) {
     actions.push({ type: "show", desktop: replacement, output: output.name });
     shown[output.name] = replacement;
     location[replacement] = output.key;
+    home[replacement] = home[replacement] ?? output.key;
   }
 
-  return {
-    model: { location, home: Object.assign({}, location), previous: model.previous },
-    actions,
-  };
+  return { model: { location, home, previous: model.previous }, actions };
+}
+
+/**
+ * Brings the model in line with outputs that came or went (spec 5.4).
+ *
+ * Workspaces of a removed output move to the focused output, or the first in
+ * screen order, and keep the removed one as their home. Every window then
+ * goes to where its workspace lives: KWin spreads the windows of a removed
+ * output over the nearest ones, and replaces the desktop of a window it moves
+ * to an output not showing it, so the desktop is set again.
+ */
+export function outputsChanged(model, snapshot) {
+  const scene = analyse(snapshot);
+  const fallback = scene.keyOf[scene.focused] ?? scene.outputsInOrder[0]?.key;
+  if (!fallback) {
+    return { model, actions: [] };
+  }
+  const location = Object.assign({}, model.location);
+  for (const desktop of Object.keys(location)) {
+    if (!scene.connectedKeys.has(location[desktop])) {
+      location[desktop] = fallback;
+    }
+  }
+
+  const actions = [];
+  for (const window of scene.managed) {
+    const desktop = window.desktops[0];
+    const target = scene.nameOf[location[desktop]];
+    if (target && target !== window.output) {
+      actions.push(
+        { type: "sendToOutput", window: window.id, output: target },
+        { type: "adopt", window: window.id, desktop },
+      );
+    }
+  }
+  return { model: Object.assign({}, model, { location }), actions };
 }
 
 /**
@@ -177,11 +214,13 @@ export function moveWorkspace(model, snapshot, direction) {
   }
 
   const location = Object.assign({}, model.location, { [desktop]: scene.keyOf[to] });
+  const home = Object.assign({}, model.home, { [desktop]: scene.keyOf[to] });
   const shown = Object.assign({}, scene.shown, { [to]: desktop });
   delete shown[from];
   const hidden = scene.shown[to];
   if (!scene.windowCounts[hidden]) {
     delete location[hidden];
+    delete home[hidden];
   }
   const replacement = replacementFor(model, snapshot, scene.outputNamed[from], location, shown);
   if (!replacement) {
@@ -191,6 +230,7 @@ export function moveWorkspace(model, snapshot, direction) {
     };
   }
   location[replacement] = scene.keyOf[from];
+  home[replacement] = home[replacement] ?? scene.keyOf[from];
 
   const windows = scene.managed.filter((w) => w.desktops[0] === desktop && w.output === from);
   const actions = [{ type: "show", desktop, output: to }]
@@ -203,10 +243,18 @@ export function moveWorkspace(model, snapshot, direction) {
         warp: windows.some((w) => !w.minimized) ? "window" : "centre",
       },
     ]);
-  return {
-    model: Object.assign({}, model, { location, home: Object.assign({}, location) }),
-    actions,
-  };
+  return { model: Object.assign({}, model, { location, home }), actions };
+}
+
+/**
+ * A workspace keeps its home while it stays where it is, or when its stored
+ * output is gone; moving between connected outputs moves its home too.
+ */
+function homeOf(model, scene, desktop, key) {
+  const stored = model.location[desktop];
+  const keep =
+    model.home[desktop] && stored && (stored === key || !scene.connectedKeys.has(stored));
+  return keep ? model.home[desktop] : key;
 }
 
 function locate(model, scene, desktop) {

@@ -197,9 +197,11 @@ Plasma 6.7.5, two monitors, *Focus follows mouse*, *Fade Desktop* effect.
 location:  Map<desktopId, outputKey>    // where the workspace lives now
 home:      Map<desktopId, outputKey>    // where it wants to live (differs from
                                         // location only after an evacuation)
-lastShown: Map<outputKey, desktopId>    // last workspace each output showed,
-                                        // kept for disconnected outputs too
+previous:  Map<outputKey, desktopId>    // what each output showed before its
+                                        // current workspace (6.2)
 ```
+There is no `lastShown`: KWin itself shows on a returning output the desktop
+it showed before it was unplugged (§3).
 
 ### Invariants (enforce after every event)
 - **I1** — A workspace is shown on at most one output.
@@ -268,16 +270,15 @@ direction D (6.5). If there is no neighbour, do nothing.
 ### 5.4 Monitor unplugged
 Debounce: act only after outputs have been stable for ~750 ms (6.7).
 For each disconnected output X:
-1. Remember `lastShown[X]` (already tracked).
-2. Fallback output Y = the focused output if still connected, else the first
+1. Fallback output Y = the focused output if still connected, else the first
    connected output in `screenOrder`.
-3. For every workspace W with `location[W] === X`: `location[W] = Y`, keep
+2. For every workspace W with `location[W] === X`: `location[W] = Y`, keep
    `home[W] = X`. KWin has already moved the windows to the nearest outputs,
    keeping desktop W (§3). Send the ones not on Y to Y and set their
    `window.desktops` back to `[W]`.
-4. Y keeps showing what it showed; evacuated workspaces are hidden on Y until
+3. Y keeps showing what it showed; evacuated workspaces are hidden on Y until
    the user switches to them.
-5. Re-check I1–I6.
+4. Re-check I1–I6.
 
 ### 5.5 Monitor (re)connected
 After the debounce, for each newly connected output X:
