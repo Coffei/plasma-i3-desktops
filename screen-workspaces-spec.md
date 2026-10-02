@@ -208,6 +208,9 @@ lastShown: Map<outputKey, desktopId>    // last workspace each output showed,
   `location[W]`.
 - **I4** — `location[W]` is a connected output for every mapped W.
 - **I5** — Unmapped workspaces have no `location` (but see 6.4 about `home`).
+- **I6** — A shown workspace is shown at its location: if O shows W, then
+  `location[W]` is O. Together with I3, the windows of a shown workspace are on
+  the output showing it.
 
 Write one `reconcile()` function that, given current KWin state, restores all
 invariants with the minimum number of changes, and call it (debounced) after
@@ -225,7 +228,7 @@ our own changes (a re-entrancy counter around every mutation).
    the output holding its managed windows. If its windows are spread over
    several outputs, see 6.8.
 3. Shown workspaces that are unoccupied get the output showing them.
-4. Fix I1/I2 collisions (6.3).
+4. Fix I1 and I6 (6.3).
 
 No config persistence is needed for this — the window positions *are* the
 state. (KWin scripts cannot write their own config without a D-Bus helper.)
@@ -266,7 +269,7 @@ For each disconnected output X:
    `window.desktops` back to `[W]`.
 4. Y keeps showing what it showed; evacuated workspaces are hidden on Y until
    the user switches to them.
-5. Re-check I1–I5.
+5. Re-check I1–I6.
 
 ### 5.5 Monitor (re)connected
 After the debounce, for each newly connected output X:
@@ -563,7 +566,7 @@ of state and returning a list of actions. Test with Node's built-in `node:test`.
 
 ## 10. Acceptance criteria
 - All scenarios in section 8 pass in the e2e harness.
-- No invariant violations after any scenario (the test harness checks I1–I5
+- No invariant violations after any scenario (the test harness checks I1–I6
   after every step).
 - No visible flicker beyond a single desktop switch per user action, including
   Plasma switches corrected by 5.7.

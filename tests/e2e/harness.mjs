@@ -13,6 +13,7 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -25,9 +26,11 @@ const execFileAsync = promisify(execFile);
 
 export const SCRIPT_ID = "plasma-i3-desktops";
 const DUMP_SHORTCUT = "plasma-i3-desktops: Dump state";
+const PROBE_DUMP_SHORTCUT = "pi3d-probe: Dump state";
 const STATE_MARKER = "PLASMA_I3_DESKTOPS_STATE ";
 const PROBE_MARKER = "PI3D_PROBE ";
 const PACKAGE_DIR = resolve(import.meta.dirname, "../../package");
+const CODE_DIR = join(PACKAGE_DIR, "contents/code");
 const PROBES_DIR = resolve(import.meta.dirname, "probes");
 const CLIENT_QML = resolve(import.meta.dirname, "client.qml");
 const SOCKET = "wayland-pi3d";
@@ -57,6 +60,9 @@ process.on("exit", () => {
  * over the defaults: per-screen desktops on, 10 desktops, the script enabled
  * and animations off. Debug is on by default, so state dumps include window
  * captions, which is how tests find their windows.
+ *
+ * With `script: false`, KWin runs without the script, for tests of KWin's own
+ * behaviour; state() then comes from a probe instead.
  */
 export async function startKwin({
   outputs = 2,
@@ -64,9 +70,10 @@ export async function startKwin({
   height = 1080,
   perOutputDesktops = true,
   debug = true,
+  script = true,
   config = {},
 } = {}) {
-  const kwin = new Kwin({ outputs, width, height });
+  const kwin = new Kwin({ outputs, width, height, script });
   try {
     kwin.writeConfig(
       mergeConfig(
@@ -74,7 +81,7 @@ export async function startKwin({
           kwinrc: {
             Windows: { PerOutputVirtualDesktops: perOutputDesktops },
             Desktops: { Number: 10, Rows: 1 },
-            Plugins: { [`${SCRIPT_ID}Enabled`]: true },
+            Plugins: { [`${SCRIPT_ID}Enabled`]: script },
             [`Script-${SCRIPT_ID}`]: { Debug: debug },
           },
           kdeglobals: { KDE: { AnimationDurationFactor: 0 } },
@@ -92,7 +99,8 @@ export async function startKwin({
 }
 
 class Kwin {
-  constructor({ outputs, width, height }) {
+  constructor({ outputs, width, height, script }) {
+    this.scriptRunning = script;
     this.args = [
       "--virtual",
       "--no-lockscreen",
@@ -171,6 +179,19 @@ class Kwin {
     this.busAddress = await this.waitFor(() => readIfExists(this.busFile).trim(), {
       message: "D-Bus session did not start",
     });
+    if (this.scriptRunning) {
+      await this.waitUntilScriptRuns();
+    } else {
+      await this.waitFor(() => this.isScriptLoaded().then(() => this.kwinAnswers), {
+        timeout: 10000,
+        message: "KWin did not start",
+      });
+      await this.runProbe("dumper.qml");
+      await this.waitFor(() => this.probeMessages().some((m) => m.probe === "dumper"));
+    }
+  }
+
+  async waitUntilScriptRuns() {
     await this.waitFor(() => this.isScriptLoaded(), {
       timeout: 10000,
       message: "script was not loaded",
@@ -181,6 +202,22 @@ class Kwin {
     if (errors.length) {
       throw new Error(`QML errors:\n${errors.join("\n")}`);
     }
+  }
+
+  /** Stops the script, e.g. to set up a scene it would otherwise react to. */
+  async unloadScript() {
+    await this.dbus("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting.unloadScript", SCRIPT_ID);
+    await this.waitFor(async () => !(await this.isScriptLoaded()), {
+      message: "script was not unloaded",
+    });
+    this.scriptRunning = false;
+  }
+
+  /** Starts the script again; it then rebuilds its state as at startup. */
+  async loadScript() {
+    await this.dbus("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting.start");
+    await this.waitUntilScriptRuns();
+    this.scriptRunning = true;
   }
 
   /** Calls a D-Bus method on the private bus and returns gdbus' textual result. */
@@ -208,6 +245,7 @@ class Kwin {
         "org.kde.kwin.Scripting.isScriptLoaded",
         SCRIPT_ID,
       );
+      this.kwinAnswers = true;
       return reply === "(true,)";
     } catch {
       return false;
@@ -237,10 +275,10 @@ class Kwin {
     );
   }
 
-  /** Returns the script's state dump (see snapshot.mjs) plus `active`. */
+  /** Returns the script's state dump (see snapshot.mjs) plus `active` and `model`. */
   async state() {
     const dumpsBefore = this.stateDumps().length;
-    await this.invokeShortcut(DUMP_SHORTCUT);
+    await this.invokeShortcut(this.scriptRunning ? DUMP_SHORTCUT : PROBE_DUMP_SHORTCUT);
     // A line still being written does not parse yet, so keep polling.
     return this.waitFor(
       () => {
@@ -311,14 +349,18 @@ class Kwin {
   /**
    * Loads and runs a one-off KWin script from tests/e2e/probes.
    *
-   * The probe can `import "params.mjs" as Params` to read `params`. Probes
-   * report back by logging `PI3D_PROBE <json>`, see probeMessages().
+   * The probe can `import "params.mjs" as Params` to read `params`, and
+   * import the script's modules (e.g. "snapshot.mjs"). Probes report back by
+   * logging `PI3D_PROBE <json>`, see probeMessages().
    */
   async runProbe(file, params = {}) {
     const name = `pi3d-probe-${++this.probeCount}`;
     const dir = join(this.base, "probes", name);
     mkdirSync(dir, { recursive: true });
     copyFileSync(join(PROBES_DIR, file), join(dir, "main.qml"));
+    for (const module of readdirSync(CODE_DIR)) {
+      copyFileSync(join(CODE_DIR, module), join(dir, module));
+    }
     writeFileSync(join(dir, "params.mjs"), `export const params = ${JSON.stringify(params)};\n`);
     const reply = await this.dbus(
       "org.kde.KWin",

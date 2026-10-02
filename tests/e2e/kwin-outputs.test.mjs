@@ -5,19 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { startKwin } from "./harness.mjs";
-
-function desktopNumbers(state, window) {
-  return window.desktops.map((id) => state.desktops.find((d) => d.id === id).number);
-}
-
-function shownDesktop(state, outputName) {
-  const output = state.outputs.find((o) => o.name === outputName);
-  return state.desktops.find((d) => d.id === output.desktop).number;
-}
-
-function windowTitled(state, caption) {
-  return state.windows.find((w) => w.caption === caption);
-}
+import { desktopNumbers, shownDesktop, windowTitled } from "./state.mjs";
 
 async function waitForOutputCount(kwin, count) {
   return kwin.waitFor(
@@ -30,7 +18,7 @@ async function waitForOutputCount(kwin, count) {
 }
 
 test("virtual outputs have no EDID data", { timeout: 30000 }, async (t) => {
-  const kwin = await startKwin();
+  const kwin = await startKwin({ script: false });
   t.after(() => kwin.stop());
 
   const state = await kwin.state();
@@ -44,7 +32,7 @@ test(
   "sendClientToScreen keeps a window's desktop only if the target shows it",
   { timeout: 30000 },
   async (t) => {
-    const kwin = await startKwin();
+    const kwin = await startKwin({ script: false });
     t.after(() => kwin.stop());
     await kwin.act({ showDesktop: { desktop: 2, output: "Virtual-1" } });
     await kwin.spawnWindow("A");
@@ -73,7 +61,7 @@ test(
   "unplug moves windows to the remaining output with their desktops, replug restores them",
   { timeout: 60000 },
   async (t) => {
-    const kwin = await startKwin();
+    const kwin = await startKwin({ script: false });
     t.after(() => kwin.stop());
     await kwin.act({ showDesktop: { desktop: 2, output: "Virtual-1" } });
     await kwin.spawnWindow("A");
@@ -132,7 +120,7 @@ test(
   "unplugging the middle of three outputs splits its windows by nearest output",
   { timeout: 60000 },
   async (t) => {
-    const kwin = await startKwin({ outputs: 3 });
+    const kwin = await startKwin({ script: false, outputs: 3 });
     t.after(() => kwin.stop());
     await kwin.spawnWindow("Left");
     await kwin.spawnWindow("Right");

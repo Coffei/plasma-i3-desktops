@@ -1,0 +1,180 @@
+// Where workspaces live, and what to change so that KWin matches (spec §4–§6).
+//
+// The functions take the model and a snapshot (see snapshot.mjs) and return
+// a new model and the actions that bring KWin in line; they never touch KWin.
+// The model is plain data:
+//   location: desktop id -> key of the output the workspace lives on
+//   home:     desktop id -> output key it wants to live on (= location for now)
+//   previous: output key  -> desktop id the output showed before its current one
+//
+// Actions:
+//   {type: "show", desktop, output}   show a desktop on an output (by name)
+//   {type: "adopt", window, desktop}  move a window to another desktop
+//   {type: "warn", text}              something the user should know about
+
+export function emptyModel() {
+  return { location: {}, home: {}, previous: {} };
+}
+
+/** Whether `window` belongs to a workspace for location purposes (spec 5.8). */
+export function isManaged(window) {
+  return (
+    window.normalWindow &&
+    !window.transient &&
+    !window.specialWindow &&
+    !window.desktopWindow &&
+    !window.dock &&
+    !window.popupWindow &&
+    !window.skipTaskbar &&
+    !window.onAllDesktops &&
+    window.desktops.length === 1
+  );
+}
+
+/**
+ * Restores the invariants of spec §4 after KWin's state changed.
+ *
+ * Unmapped workspaces are forgotten. A workspace with windows keeps its
+ * stored location while that output is connected, otherwise it lives where
+ * most of its windows are; an empty, shown workspace lives where it is shown,
+ * on the focused output if it is shown on several. Every output showing a
+ * workspace that lives elsewhere switches to another one (spec 6.2).
+ */
+export function reconcile(model, snapshot) {
+  const scene = analyse(snapshot);
+  const location = {};
+  for (const desktop of snapshot.desktops) {
+    const key = locate(model, scene, desktop.id);
+    if (key) {
+      location[desktop.id] = key;
+    }
+  }
+
+  const actions = [];
+  const shown = Object.assign({}, scene.shown);
+  for (const output of scene.outputsInOrder) {
+    const desktop = shown[output.name];
+    if (!desktop || location[desktop] === output.key) {
+      continue;
+    }
+    const replacement = replacementFor(model, snapshot, output, location, shown);
+    if (!replacement) {
+      actions.push({
+        type: "warn",
+        text: `no free workspace for ${output.name}, it keeps showing a workspace of another monitor`,
+      });
+      continue;
+    }
+    actions.push({ type: "show", desktop: replacement, output: output.name });
+    shown[output.name] = replacement;
+    location[replacement] = output.key;
+  }
+
+  return {
+    model: { location, home: Object.assign({}, location), previous: model.previous },
+    actions,
+  };
+}
+
+/**
+ * Builds the model from scratch, as at startup (spec 5.1).
+ *
+ * Like reconcile(), and windows away from their workspace's location adopt
+ * the workspace shown on their own output (spec 6.8).
+ */
+export function rebuild(snapshot) {
+  const { model, actions } = reconcile(emptyModel(), snapshot);
+  const scene = analyse(snapshot);
+  const shown = Object.assign({}, scene.shown);
+  for (const action of actions) {
+    if (action.type === "show") {
+      shown[action.output] = action.desktop;
+    }
+  }
+  for (const window of scene.managed) {
+    const desktop = window.desktops[0];
+    const shownThere = shown[window.output];
+    if (
+      model.location[desktop] !== scene.keyOf[window.output] &&
+      shownThere &&
+      shownThere !== desktop
+    ) {
+      actions.push({ type: "adopt", window: window.id, desktop: shownThere });
+    }
+  }
+  return { model, actions };
+}
+
+function locate(model, scene, desktop) {
+  const counts = scene.windowCounts[desktop];
+  const showing = scene.showing[desktop] ?? [];
+  if (!counts && showing.length === 0) {
+    return null;
+  }
+  if (!counts) {
+    const keeper = showing.includes(scene.focused) ? scene.focused : showing[0];
+    return scene.keyOf[keeper];
+  }
+  const stored = model.location[desktop];
+  if (stored && scene.connectedKeys.has(stored)) {
+    return stored;
+  }
+  return scene.keyOf[majorityOutput(scene, counts, showing)];
+}
+
+function majorityOutput(scene, counts, showing) {
+  const most = Math.max.apply(null, Object.values(counts));
+  const candidates = scene.outputsInOrder
+    .map((output) => output.name)
+    .filter((name) => counts[name] === most);
+  return candidates.find((name) => showing.includes(name)) ?? candidates[0];
+}
+
+/** What `output` shows instead of a workspace that lives elsewhere (spec 6.2). */
+function replacementFor(model, snapshot, output, location, shown) {
+  const shownAnywhere = new Set(Object.values(shown));
+  const previous = model.previous[output.key];
+  if (previous && location[previous] === output.key && !shownAnywhere.has(previous)) {
+    return previous;
+  }
+  const free = snapshot.desktops.find(
+    (desktop) => !location[desktop.id] && !shownAnywhere.has(desktop.id),
+  );
+  return free?.id ?? null;
+}
+
+function analyse(snapshot) {
+  const order = new Map(snapshot.screenOrder.map((name, index) => [name, index]));
+  const outputsInOrder = snapshot.outputs
+    .slice()
+    .sort((a, b) => (order.get(a.name) ?? Infinity) - (order.get(b.name) ?? Infinity));
+  const keyOf = {};
+  const shown = {};
+  const showing = {};
+  // No `??=`: KWin's JavaScript engine is older than that.
+  for (const output of outputsInOrder) {
+    keyOf[output.name] = output.key;
+    if (output.desktop) {
+      shown[output.name] = output.desktop;
+      showing[output.desktop] = (showing[output.desktop] ?? []).concat(output.name);
+    }
+  }
+  const managed = snapshot.windows.filter((window) => isManaged(window) && keyOf[window.output]);
+  const windowCounts = {};
+  for (const window of managed) {
+    const desktop = window.desktops[0];
+    const counts = windowCounts[desktop] ?? {};
+    counts[window.output] = (counts[window.output] ?? 0) + 1;
+    windowCounts[desktop] = counts;
+  }
+  return {
+    outputsInOrder,
+    keyOf,
+    connectedKeys: new Set(Object.values(keyOf)),
+    shown,
+    showing,
+    managed,
+    windowCounts,
+    focused: snapshot.activeScreen,
+  };
+}

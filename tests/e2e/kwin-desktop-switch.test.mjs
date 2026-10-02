@@ -5,11 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sleep, startKwin } from "./harness.mjs";
-
-function shownDesktop(state, outputName) {
-  const output = state.outputs.find((o) => o.name === outputName);
-  return state.desktops.find((d) => d.id === output.desktop).number;
-}
+import { shownDesktop } from "./state.mjs";
 
 /**
  * Virtual-0 shows desktop 1, Virtual-1 shows desktop 2; the corrector and,
@@ -51,7 +47,7 @@ test(
   "a synchronous correction is seen out of order by scripts connected after it",
   { timeout: 30000 },
   async (t) => {
-    const kwin = await startKwin();
+    const kwin = await startKwin({ script: false });
     t.after(() => kwin.stop());
     await setUp(kwin, { deferred: false });
 
@@ -67,7 +63,7 @@ test(
   "a deferred correction is seen in order by scripts connected after it",
   { timeout: 30000 },
   async (t) => {
-    const kwin = await startKwin();
+    const kwin = await startKwin({ script: false });
     t.after(() => kwin.stop());
     await setUp(kwin, { deferred: true });
 
@@ -83,6 +79,7 @@ for (const deferred of [false, true]) {
     { timeout: 30000 },
     async (t) => {
       const kwin = await startKwin({
+        script: false,
         config: { kdeglobals: { KDE: { AnimationDurationFactor: 1 } } },
       });
       t.after(() => kwin.stop());

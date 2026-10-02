@@ -35,7 +35,7 @@ test(
   "Switch to Screen and MoveMouseToCenter focus an empty output",
   { timeout: 30000 },
   async (t) => {
-    const kwin = await startKwin();
+    const kwin = await startKwin({ script: false });
     t.after(() => kwin.stop());
     const before = await kwin.state();
     assert.equal(before.activeScreen, "Virtual-0");
@@ -51,7 +51,7 @@ test(
   "a window opened after the warp lands on the warped-to output",
   { timeout: 30000 },
   async (t) => {
-    const kwin = await startKwin();
+    const kwin = await startKwin({ script: false });
     t.after(() => kwin.stop());
     await actAndWaitForCursor(kwin, focusScreen(1), CENTRE_1);
 
@@ -68,7 +68,7 @@ test(
   "activating a window and MoveMouseToFocus warp to the window's centre",
   { timeout: 30000 },
   async (t) => {
-    const kwin = await startKwin();
+    const kwin = await startKwin({ script: false });
     t.after(() => kwin.stop());
     await actAndWaitForCursor(kwin, focusScreen(1), CENTRE_1);
     await kwin.spawnWindow("A");
