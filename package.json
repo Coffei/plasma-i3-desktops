@@ -1,0 +1,17 @@
+{
+  "name": "plasma-i3-desktops",
+  "private": true,
+  "description": "i3-style per-monitor workspaces for KDE Plasma",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "format": "prettier --write \"**/*.{js,mjs,json}\"",
+    "format:check": "prettier --check \"**/*.{js,mjs,json}\""
+  },
+  "devDependencies": {
+    "prettier": "3.9.9"
+  }
+}
