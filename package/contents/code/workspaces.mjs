@@ -234,17 +234,23 @@ function majorityOutput(scene, counts, showing) {
   return candidates.find((name) => showing.includes(name)) ?? candidates[0];
 }
 
-/** What `output` shows instead of a workspace that lives elsewhere (spec 6.2). */
+/**
+ * What `output` shows instead of a workspace that lives elsewhere (spec 6.2):
+ * its previous workspace if that still lives there, else the lowest-numbered
+ * hidden workspace living there, else the lowest-numbered free one.
+ */
 function replacementFor(model, snapshot, output, location, shown) {
   const shownAnywhere = new Set(Object.values(shown));
+  const hiddenHere = (id) => location[id] === output.key && !shownAnywhere.has(id);
   const previous = model.previous[output.key];
-  if (previous && location[previous] === output.key && !shownAnywhere.has(previous)) {
+  if (previous && hiddenHere(previous)) {
     return previous;
   }
+  const own = snapshot.desktops.find((desktop) => hiddenHere(desktop.id));
   const free = snapshot.desktops.find(
     (desktop) => !location[desktop.id] && !shownAnywhere.has(desktop.id),
   );
-  return free?.id ?? null;
+  return (own ?? free)?.id ?? null;
 }
 
 function analyse(snapshot) {

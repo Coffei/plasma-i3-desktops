@@ -420,8 +420,9 @@ Happens on 5.3 (move), 5.5 (a workspace returning home), and on collisions.
 Options: (a) swap — it shows the workspace that was on the other side;
 (b) lowest-numbered free workspace (unmapped, not shown anywhere);
 (c) the previously shown workspace on that output, if still located there.
-**Decision:** (c), falling back to (b). (a) could become a separate "swap
-workspaces between monitors" action later.
+**Decision:** (c); else the lowest-numbered hidden workspace living on that
+output, so a monitor keeps to its own workspaces; else (b). (a) could become a
+separate "swap workspaces between monitors" action later.
 If no free workspace exists → 6.10.
 
 ### 6.3 Collisions: a workspace ends up shown on two outputs — **decided**

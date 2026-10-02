@@ -196,6 +196,36 @@ describe("reconcile: outputs showing a workspace of another output", () => {
     assert.deepEqual(reconciled(model, snapshot).shown, { A: 1, B: 2 });
   });
 
+  test("...or to the lowest hidden workspace living there before a free one", () => {
+    const snapshot = scene({
+      shown: { A: 3, B: 2 },
+      windows: [
+        { id: "w1", desktop: 3, output: "B" },
+        { id: "w5", desktop: 5, output: "A" },
+        { id: "w6", desktop: 6, output: "A" },
+      ],
+    });
+
+    const model = modelWith({ d3: "B", d5: "A", d6: "A" });
+
+    assert.deepEqual(reconciled(model, snapshot).shown, { A: 5, B: 2 });
+  });
+
+  test("...preferring the previous workspace to a lower one living there", () => {
+    const snapshot = scene({
+      shown: { A: 3, B: 2 },
+      windows: [
+        { id: "w1", desktop: 3, output: "B" },
+        { id: "w5", desktop: 5, output: "A" },
+        { id: "w6", desktop: 6, output: "A" },
+      ],
+    });
+
+    const model = modelWith({ d3: "B", d5: "A", d6: "A" }, { A: "d6" });
+
+    assert.deepEqual(reconciled(model, snapshot).shown, { A: 6, B: 2 });
+  });
+
   test("outputs switching away never pick the same free workspace", () => {
     const snapshot = scene({ shown: { A: 1, B: 1, C: 1 } });
 
@@ -387,6 +417,22 @@ describe("moveWorkspace", () => {
     });
 
     const model = modelWith({ d1: "A", d2: "B", d4: "A" }, { A: "d4" });
+
+    const { actions } = moveWorkspace(model, snapshot, "right");
+
+    assert.deepEqual(actions.at(-2), show("d4", "A"));
+  });
+
+  test("the output left behind shows a hidden workspace of its own before a free one", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [
+        { id: "w1", desktop: 1, output: "A" },
+        { id: "w4", desktop: 4, output: "A" },
+      ],
+    });
+
+    const model = modelWith({ d1: "A", d2: "B", d4: "A" });
 
     const { actions } = moveWorkspace(model, snapshot, "right");
 
