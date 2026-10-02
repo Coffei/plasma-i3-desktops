@@ -8,8 +8,12 @@ import { startKwin } from "./harness.mjs";
 const CENTRE_0 = { x: 960, y: 540 };
 const CENTRE_1 = { x: 2880, y: 540 };
 
-async function focusAndWarp(kwin, params, expectedCursor) {
-  await kwin.runProbe("focus-and-warp.qml", params);
+function focusScreen(index) {
+  return [{ shortcut: `Switch to Screen ${index}` }, { shortcut: "MoveMouseToCenter" }];
+}
+
+async function actAndWaitForCursor(kwin, actions, expectedCursor) {
+  await kwin.act(...actions);
   return kwin.waitFor(
     async () => {
       const state = await kwin.state();
@@ -37,11 +41,7 @@ test(
     assert.equal(before.activeScreen, "Virtual-0");
     assert.deepEqual(before.screenOrder, ["Virtual-0", "Virtual-1"]);
 
-    const state = await focusAndWarp(
-      kwin,
-      { shortcuts: ["Switch to Screen 1", "MoveMouseToCenter"] },
-      CENTRE_1,
-    );
+    const state = await actAndWaitForCursor(kwin, focusScreen(1), CENTRE_1);
 
     assert.equal(state.activeScreen, "Virtual-1");
   },
@@ -53,7 +53,7 @@ test(
   async (t) => {
     const kwin = await startKwin();
     t.after(() => kwin.stop());
-    await focusAndWarp(kwin, { shortcuts: ["Switch to Screen 1", "MoveMouseToCenter"] }, CENTRE_1);
+    await actAndWaitForCursor(kwin, focusScreen(1), CENTRE_1);
 
     const window = await kwin.spawnWindow("A");
 
@@ -70,17 +70,17 @@ test(
   async (t) => {
     const kwin = await startKwin();
     t.after(() => kwin.stop());
-    await focusAndWarp(kwin, { shortcuts: ["Switch to Screen 1", "MoveMouseToCenter"] }, CENTRE_1);
+    await actAndWaitForCursor(kwin, focusScreen(1), CENTRE_1);
     await kwin.spawnWindow("A");
     // Off the output's centre, so MoveMouseToCenter would miss it.
     const geometry = { x: 2020, y: 100, width: 400, height: 300 };
-    await kwin.runProbe("set-geometry.qml", { caption: "A", geometry });
+    await kwin.act({ setGeometry: { caption: "A", geometry } });
     const window = await kwin.waitForWindow("A", (w) => w.geometry.x === geometry.x);
-    await focusAndWarp(kwin, { shortcuts: ["Switch to Screen 0", "MoveMouseToCenter"] }, CENTRE_0);
+    await actAndWaitForCursor(kwin, focusScreen(0), CENTRE_0);
 
-    const state = await focusAndWarp(
+    const state = await actAndWaitForCursor(
       kwin,
-      { activate: "A", shortcuts: ["MoveMouseToFocus"] },
+      [{ activate: "A" }, { shortcut: "MoveMouseToFocus" }],
       centre(window.geometry),
     );
 

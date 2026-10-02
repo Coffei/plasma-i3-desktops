@@ -121,6 +121,7 @@ class Kwin {
     this.busFile = join(this.base, "bus");
     this.clients = [];
     this.probeCount = 0;
+    this.actionRuns = 0;
     this.env = { ...process.env };
     for (const key of SESSION_VARIABLES) {
       delete this.env[key];
@@ -257,17 +258,47 @@ class Kwin {
   async spawnWindow(caption) {
     const logFd = openSync(this.logPath, "a");
     const client = spawn(findQtTool("qml", "QML_BIN"), [CLIENT_QML, "--", caption], {
-      env: {
-        ...this.env,
-        WAYLAND_DISPLAY: SOCKET,
-        QT_QPA_PLATFORM: "wayland",
-        DBUS_SESSION_BUS_ADDRESS: this.busAddress,
-      },
+      env: this.clientEnv(),
       stdio: ["ignore", logFd, logFd],
     });
     closeSync(logFd);
     this.clients.push(client);
     return this.waitForWindow(caption);
+  }
+
+  /** Environment for programs that talk to the nested KWin. */
+  clientEnv() {
+    return {
+      ...this.env,
+      WAYLAND_DISPLAY: SOCKET,
+      QT_QPA_PLATFORM: "wayland",
+      DBUS_SESSION_BUS_ADDRESS: this.busAddress,
+    };
+  }
+
+  /** Turns a virtual output off or on, as unplugging or plugging a monitor does. */
+  async setOutputEnabled(name, enabled) {
+    await execFileAsync("kscreen-doctor", [`output.${name}.${enabled ? "enable" : "disable"}`], {
+      env: this.clientEnv(),
+      timeout: 20000,
+    });
+  }
+
+  /**
+   * Makes KWin calls through the actions probe (see probes/actions.qml) and
+   * waits until they have been made.
+   */
+  async act(...actions) {
+    const run = ++this.actionRuns;
+    const probe = await this.runProbe("actions.qml", { run, actions });
+    const result = await this.waitFor(
+      () => this.probeMessages().find((m) => m.probe === "actions" && m.run === run),
+      { message: "actions probe did not finish" },
+    );
+    await probe.unload();
+    if (result.error) {
+      throw new Error(`action failed: ${result.error}`);
+    }
   }
 
   async waitForWindow(caption, predicate = () => true) {

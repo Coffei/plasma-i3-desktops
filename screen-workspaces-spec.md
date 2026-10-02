@@ -139,13 +139,26 @@ there.
   empty output has no desktop window, so keyboard focus stays on the previous
   window; whether a real session focuses the desktop window instead is still
   to be checked by hand.
+- **Window moves and hotplug** (`kwin-outputs.test.mjs`), with outputs turned
+  off and on through `kscreen-doctor`. That stands in for unplugging; DPMS and
+  dock bursts are not covered.
+  - `sendClientToScreen` to an output showing another desktop moves the window
+    to that desktop; showing the window's desktop on the target first keeps it.
+  - Unplug: windows move to the nearest remaining output (by their centre) and
+    keep their desktops; the remaining output keeps showing its desktop. With
+    three outputs, the middle one's windows split between its neighbours. KWin
+    emits one `screensChanged` and no `currentDesktopChanged`.
+  - Replug: windows go back to their previous output and geometry, also after
+    a non-interactive move while the output was away, and keep their desktops.
+    The output shows the desktop it showed before unplug, **without** a
+    `currentDesktopChanged` signal, so the hotplug handler must read what each
+    output shows after `screensChanged`.
+  - Virtual outputs have empty manufacturer, model and serial number.
 
 ### Must be verified before relying on them
 - Whether correcting a Plasma switch synchronously inside
   `currentDesktopChanged` (5.7) is flicker-free, and whether the nested signal
   it causes confuses anything else in KWin.
-- The unplug/replug behaviour above, observed in the virtual test backend,
-  before writing the hotplug handler.
 
 ---
 
@@ -253,7 +266,9 @@ After the debounce, for each newly connected output X:
    send those back to their workspace's location. After every
    `sendClientToScreen`, set `window.desktops` back to the workspace.
 2. X shows `lastShown[X]` if that workspace now lives on X; else the
-   lowest-numbered workspace living on X; else a free workspace (6.2).
+   lowest-numbered workspace living on X; else a free workspace (6.2). KWin
+   already shows `lastShown[X]` again by itself (§3), so usually nothing
+   changes here.
 3. Any output that was showing a workspace which just left needs a new one (6.2).
 4. Brand-new outputs with no history just get a free workspace.
 5. Do **not** move focus or the pointer to the new monitor.
