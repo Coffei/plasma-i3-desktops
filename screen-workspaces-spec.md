@@ -500,7 +500,8 @@ windows are and stragglers adopt the workspace shown on their output.
 
 ### 6.9 Pressing the shortcut of the already-focused workspace — **decided**
 Options: no-op, or `workspace_back_and_forth` (switch to the previous one).
-**Decision:** no-op by default, config option for back-and-forth.
+**Decision:** no-op by default, config option for back-and-forth (milestone
+6, not implemented yet).
 
 ### 6.10 Number of workspaces — **decided**
 The user configures 10 desktops (README). `Meta+1…9` switch to workspaces 1–9
@@ -526,7 +527,7 @@ monitors is lost on reload — acceptable for v1.
 ---
 
 ## 7. Configuration (kcfg, `[Script-plasma-i3-desktops]` in kwinrc)
-- `BackAndForth` (bool, default false) — 6.9
+- `BackAndForth` (bool, default false) — 6.9, milestone 6
 - `HotplugDebounceMs` (int, default 750) — 6.7
 - `Debug` (bool, default false) — verbose logging to the journal
 
