@@ -58,6 +58,57 @@ test(
   },
 );
 
+/**
+ * Window A focused on Virtual-0 and larger than Virtual-1, which is scaled to
+ * 960x540: KWin moves A there only once A has redrawn itself smaller.
+ */
+async function windowLargerThanVirtual1(kwin) {
+  await kwin.setOutputScale("Virtual-1", 2);
+  await kwin.waitForOutputsSettled();
+  await kwin.spawnWindow("A");
+  await kwin.act(
+    { activate: "A" },
+    { setGeometry: { caption: "A", geometry: { x: 100, y: 100, width: 1200, height: 800 } } },
+  );
+  await kwin.waitForWindow("A", (w) => w.geometry.width === 1200);
+}
+
+test(
+  "the pointer follows a window that has to shrink to fit the other monitor",
+  { timeout: 30000 },
+  async (t) => {
+    const kwin = await startKwin();
+    t.after(() => kwin.stop());
+    await windowLargerThanVirtual1(kwin);
+
+    await moveWorkspace(kwin, "right");
+
+    const moved = await kwin.waitForWindow("A", (w) => w.output === "Virtual-1");
+    const state = await waitForCursor(kwin, centre(moved.geometry));
+    assert.equal(state.activeScreen, "Virtual-1");
+    assert.equal(state.activeWindow, moved.id);
+  },
+);
+
+test(
+  "focus moves on when a window is not redrawn in time, the pointer to the centre",
+  { timeout: 30000 },
+  async (t) => {
+    const kwin = await startKwin();
+    t.after(() => kwin.stop());
+    await windowLargerThanVirtual1(kwin);
+    kwin.freezeWindow("A", true);
+
+    await moveWorkspace(kwin, "right");
+
+    const state = await waitForCursor(kwin, { x: 2400, y: 270 });
+    assert.equal(state.activeScreen, "Virtual-1");
+    assert.equal(windowTitled(state, "A").output, "Virtual-0");
+    assert.match(kwin.log(), /windows did not arrive on Virtual-1 in time/);
+    kwin.freezeWindow("A", false);
+  },
+);
+
 test("moving towards no monitor does nothing", { timeout: 30000 }, async (t) => {
   const kwin = await startKwin();
   t.after(() => kwin.stop());

@@ -36,6 +36,12 @@ Item {
     // pager (spec 5.7); followed at the next reconcile.
     property var pendingSwitches: ({})
 
+    // The latest focusOutput action, held back until the windows sent to its
+    // output along with it have arrived; {output, warp, windows} or null.
+    // KWin moves a window that has to change size only once its app has
+    // redrawn it.
+    property var pendingFocus: null
+
     // Read on every use: KWin does not reload a script when its config
     // changes, but picks up new values whenever it re-reads its config.
     function config(key, defaultValue) {
@@ -186,13 +192,15 @@ Item {
     function apply(actions) {
         applying++;
         try {
-            actions.forEach(applyAction);
+            // {window, output} for each window sent to another output.
+            const sent = [];
+            actions.forEach(action => applyAction(action, sent));
         } finally {
             applying--;
         }
     }
 
-    function applyAction(action) {
+    function applyAction(action, sent) {
         if (action.type === "show") {
             const desktop = desktopWithId(action.desktop);
             debug("showing workspace " + desktop.x11DesktopNumber + " on " + action.output);
@@ -203,12 +211,43 @@ Item {
             windowWithId(action.window).desktops = [desktop];
         } else if (action.type === "sendToOutput") {
             debug("moving window " + action.window + " to " + action.output);
-            Workspace.sendClientToScreen(windowWithId(action.window), outputNamed(action.output));
+            const window = windowWithId(action.window);
+            Workspace.sendClientToScreen(window, outputNamed(action.output));
+            sent.push({
+                window: window,
+                output: action.output
+            });
         } else if (action.type === "focusOutput") {
-            focusOutput(action.output, action.warp);
+            pendingFocus = {
+                output: action.output,
+                warp: action.warp,
+                windows: sent.filter(entry => entry.output === action.output).map(entry => entry.window)
+            };
+            arrivalTimer.restart();
+            focusWhenArrived();
         } else if (action.type === "warn") {
             console.warn("plasma-i3-desktops: " + action.text);
         }
+    }
+
+    // "Switch to Screen" only picks windows already on the output, and the
+    // pointer goes to where the focused window is now.
+    function focusWhenArrived() {
+        if (pendingFocus && pendingFocus.windows.every(window => hasArrived(window, pendingFocus.output))) {
+            focusPending(pendingFocus.warp);
+        }
+    }
+
+    // A window closed on its way does not hold the focus back.
+    function hasArrived(window, outputName) {
+        return !window || window.deleted || !window.output || window.output.name === outputName;
+    }
+
+    function focusPending(warp) {
+        const output = pendingFocus.output;
+        pendingFocus = null;
+        arrivalTimer.stop();
+        focusOutput(output, warp);
     }
 
     // Scripts cannot focus an output or move the pointer, but KWin's own
@@ -317,6 +356,35 @@ Item {
         id: settleTimer
 
         onTriggered: root.outputsSettled()
+    }
+
+    // An app that does not redraw its window in time keeps it where it was;
+    // the focus moves anyway, with the pointer to the output's centre.
+    Timer {
+        id: arrivalTimer
+
+        interval: 1000
+        onTriggered: {
+            root.debug("windows did not arrive on " + root.pendingFocus.output + " in time");
+            root.focusPending("centre");
+        }
+    }
+
+    // Watches the windows pendingFocus waits for. Unlike connect(), these
+    // connections go away with the script.
+    Instantiator {
+        model: root.pendingFocus ? root.pendingFocus.windows : []
+
+        delegate: Connections {
+            required property var modelData
+
+            // Deferred, since focusing destroys this object.
+            function onOutputChanged() {
+                Qt.callLater(root.focusWhenArrived);
+            }
+
+            target: modelData
+        }
     }
 
     Component {

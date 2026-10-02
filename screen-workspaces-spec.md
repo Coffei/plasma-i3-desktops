@@ -426,6 +426,12 @@ Both are `invokeShortcut` calls through `DBusCall`; calls on one connection
 arrive in order. This is always on (5.9). KWin only registers
 `Switch to Screen 0–7`, so more than 8 outputs are out of scope.
 
+Windows the script has just sent to T must be there first: both shortcuts go
+by where a window is now, and KWin moves a window that has to change size
+(e.g. a maximized one, or one larger than T) only once its app has redrawn it
+(`XdgSurfaceWindow::moveResizeInternal`). So the script waits for them. After
+1 s it focuses T anyway, with the pointer at T's centre.
+
 Known limitation: with *Focus follows mouse*, if another window (e.g. a
 keep-above one) covers the centre of the focused window, it takes focus after
 the focus delay.

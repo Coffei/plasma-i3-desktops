@@ -319,6 +319,11 @@ class Kwin {
     );
   }
 
+  /** Stops or resumes the app of a window opened by spawnWindow(), so that it cannot redraw it. */
+  freezeWindow(caption, frozen) {
+    this.clients.find((client) => client.caption === caption).kill(frozen ? "SIGSTOP" : "SIGCONT");
+  }
+
   /** Environment for programs that talk to the nested KWin. */
   clientEnv() {
     return {
@@ -372,6 +377,21 @@ class Kwin {
       },
       { message: `${name} did not move to ${x},${y}` },
     );
+  }
+
+  /** Scales a virtual output, which shrinks its logical size, through output management. */
+  async setOutputScale(name, scale) {
+    const width = async () =>
+      (await this.state()).outputs.find((o) => o.name === name).geometry.width;
+    const before = await width();
+    this.markOutputChange();
+    await execFileAsync("kscreen-doctor", [`output.${name}.scale.${scale}`], {
+      env: this.clientEnv(),
+      timeout: 20000,
+    });
+    await this.waitFor(async () => (await width()) !== before, {
+      message: `${name} was not scaled by ${scale}`,
+    });
   }
 
   markOutputChange() {
