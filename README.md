@@ -11,7 +11,13 @@ Work in progress. The design is in [screen-workspaces-spec.md](screen-workspaces
 ```sh
 npm install        # Prettier
 npm run format     # format before committing
+npm test           # unit tests
+npm run test:e2e   # end-to-end tests in a nested KWin
 ```
+
+The end-to-end tests start an isolated `kwin_wayland --virtual` on a private D-Bus. They need
+`kwin_wayland`, `dbus-run-session`, `kpackagetool6`, `kwriteconfig6` and `gdbus`, and cannot run
+inside sandboxes that block Unix sockets. Set `PI3D_KEEP_TMP=1` to keep each test's KWin log.
 
 ## License
 

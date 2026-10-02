@@ -22,6 +22,8 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 export const SCRIPT_ID = "plasma-i3-desktops";
+const DUMP_SHORTCUT = "plasma-i3-desktops: Dump state";
+const STATE_MARKER = "PLASMA_I3_DESKTOPS_STATE ";
 const PACKAGE_DIR = resolve(import.meta.dirname, "../../package");
 const SOCKET = "wayland-pi3d";
 // sun_path is 108 bytes including the terminating null byte.
@@ -214,6 +216,37 @@ class Kwin {
     await this.dbus("org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure");
   }
 
+  /** Triggers a KWin shortcut (KWin's own or the script's) by its name. */
+  async invokeShortcut(name) {
+    await this.dbus(
+      "org.kde.kglobalaccel",
+      "/component/kwin",
+      "org.kde.kglobalaccel.Component.invokeShortcut",
+      name,
+    );
+  }
+
+  /** Returns the script's state dump (see snapshot.mjs) plus `active`. */
+  async state() {
+    const dumpsBefore = this.stateDumps().length;
+    await this.invokeShortcut(DUMP_SHORTCUT);
+    // A line still being written does not parse yet, so keep polling.
+    return this.waitFor(
+      () => {
+        const dumps = this.stateDumps();
+        return dumps.length > dumpsBefore ? parseJson(dumps.at(-1)) : undefined;
+      },
+      { message: "no state dump" },
+    );
+  }
+
+  stateDumps() {
+    return this.log()
+      .split("\n")
+      .filter((line) => line.includes(STATE_MARKER))
+      .map((line) => line.slice(line.indexOf(STATE_MARKER) + STATE_MARKER.length));
+  }
+
   log() {
     return readIfExists(this.logPath);
   }
@@ -292,6 +325,14 @@ function toGVariant(value) {
     return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
   }
   return String(value);
+}
+
+function parseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 function readIfExists(path) {

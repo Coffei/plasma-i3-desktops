@@ -80,7 +80,10 @@ Implement as a **QML KWin script** (`X-Plasma-API: declarativescript`,
 `main.qml`), not a plain JS script. Reasons: `Timer` for debouncing, `DBusCall`
 for invoking KWin shortcuts (pointer warp), and easier state handling. Logic
 lives in plain JavaScript ES modules (`.mjs`), imported both by `main.qml` and by
-the unit tests. No build step, no TypeScript.
+the unit tests. No build step, no TypeScript. Those modules may only use what
+KWin's JavaScript engine understands: object spread (`{...x}`) fails to load,
+`?.` and `??` work. Every e2e test loads the script, so violations show up
+there.
 
 ### Known to work on 6.7 (used by an existing script, HyprKwin)
 | API | Use |

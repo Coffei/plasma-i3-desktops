@@ -1,6 +1,7 @@
 // Entry point of the KWin script: connects KWin to the workspace logic.
 import QtQuick
 import org.kde.kwin
+import "../code/snapshot.mjs" as Snapshot
 
 Item {
     id: root
@@ -33,6 +34,15 @@ Item {
         }
     }
 
+    function dumpState() {
+        const state = Snapshot.snapshot(Workspace, {
+            includeTitles: config("Debug", false)
+        });
+        console.info("PLASMA_I3_DESKTOPS_STATE " + JSON.stringify(Object.assign({
+            active: active
+        }, state)));
+    }
+
     onActiveChanged: {
         if (started) {
             reportActivation();
@@ -41,5 +51,13 @@ Item {
     Component.onCompleted: {
         reportActivation();
         started = true;
+    }
+
+    // For bug reports and the e2e tests; has no default key.
+    ShortcutHandler {
+        name: "plasma-i3-desktops: Dump state"
+        text: "i3 Desktops: Dump state to the journal (debug)"
+        sequence: ""
+        onActivated: root.dumpState()
     }
 }
