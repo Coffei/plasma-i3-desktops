@@ -55,6 +55,7 @@ function windowData(window, includeTitles) {
     normalWindow: window.normalWindow,
     dialog: window.dialog,
     transient: window.transient,
+    transientFor: window.transientFor ? windowId(window.transientFor) : null,
     specialWindow: window.specialWindow,
     desktopWindow: window.desktopWindow,
     dock: window.dock,

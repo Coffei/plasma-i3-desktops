@@ -154,6 +154,10 @@ there.
     `currentDesktopChanged` signal, so the hotplug handler must read what each
     output shows after `screensChanged`.
   - Virtual outputs have empty manufacturer, model and serial number.
+- **New dialogs** (`external.test.mjs`): a dialog opened by a window on another
+  monitor than the focused one appears on its parent's monitor, but on the
+  focused monitor's desktop, hidden. The script moves it to its parent's
+  workspace (5.6).
 - **Undoing a Plasma switch** (`kwin-desktop-switch.test.mjs`). Correcting
   inside `currentDesktopChanged` gives the right end state and leaves no effect
   running, but scripts connected after ours receive the correction's signal
@@ -305,7 +309,10 @@ windows. It only enforces I3:
    Desktop N": whenever the script re-checks its model at runtime, a managed
    window on another output than its workspace's location is sent there and
    given its desktop back. Focus stays where it is.
-2. Transient windows (dialogs) follow their parent's output and desktop.
+2. Transient windows (dialogs, not menus) follow their parent's output and
+   desktop. This is needed: KWin opens a dialog next to its parent but gives it
+   the desktop of the focused output, so a dialog of a window on another
+   monitor would be hidden there (§3).
 
 ### 5.7 External changes (not made by the script)
 - **Plasma switches output O to W** (pager, Overview, KWin's desktop shortcuts,

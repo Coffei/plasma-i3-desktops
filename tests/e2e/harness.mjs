@@ -294,11 +294,13 @@ class Kwin {
 
   /**
    * Opens a test window titled `caption` and returns it from the state dump
-   * once KWin manages it.
+   * once KWin manages it. With `dialogAfter` (ms), the window later opens a
+   * dialog titled "<caption> dialog".
    */
-  async spawnWindow(caption) {
+  async spawnWindow(caption, { dialogAfter } = {}) {
     const logFd = openSync(this.logPath, "a");
-    const client = spawn(findQtTool("qml", "QML_BIN"), [CLIENT_QML, "--", caption], {
+    const args = [CLIENT_QML, "--", caption].concat(dialogAfter ? [String(dialogAfter)] : []);
+    const client = spawn(findQtTool("qml", "QML_BIN"), args, {
       env: this.clientEnv(),
       stdio: ["ignore", logFd, logFd],
     });

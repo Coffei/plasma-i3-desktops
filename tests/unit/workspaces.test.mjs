@@ -178,6 +178,66 @@ describe("reconcile: windows", () => {
   });
 });
 
+describe("reconcile: dialogs", () => {
+  const dialog = (overrides) => ({ transient: true, transientFor: "main", ...overrides });
+
+  test("a dialog gets its main window's workspace", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [
+        { id: "main", desktop: 2, output: "B" },
+        dialog({ id: "d", desktop: 1, output: "B" }),
+      ],
+    });
+
+    const { actions } = reconcile(modelWith({ d1: "A", d2: "B" }), snapshot);
+
+    assert.deepEqual(actions, [{ type: "adopt", window: "d", desktop: "d2" }]);
+  });
+
+  test("a dialog on another output goes to its main window", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [
+        { id: "main", desktop: 2, output: "B" },
+        dialog({ id: "d", desktop: 1, output: "A" }),
+      ],
+    });
+
+    const { actions } = reconcile(modelWith({ d1: "A", d2: "B" }), snapshot);
+
+    assert.deepEqual(actions, [
+      { type: "sendToOutput", window: "d", output: "B" },
+      { type: "adopt", window: "d", desktop: "d2" },
+    ]);
+  });
+
+  test("leaves a dialog with its main window alone, and popups always", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [
+        { id: "main", desktop: 2, output: "B" },
+        dialog({ id: "d", desktop: 2, output: "B" }),
+        dialog({ id: "menu", desktop: 1, output: "B", popupWindow: true }),
+      ],
+    });
+
+    assert.deepEqual(reconcile(modelWith({ d1: "A", d2: "B" }), snapshot).actions, []);
+  });
+
+  test("ignores dialogs of unmanaged windows", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [
+        { id: "main", desktop: 2, output: "B", skipTaskbar: true },
+        dialog({ id: "d", desktop: 1, output: "B" }),
+      ],
+    });
+
+    assert.deepEqual(reconcile(modelWith({ d1: "A", d2: "B" }), snapshot).actions, []);
+  });
+});
+
 describe("reconcile: homes", () => {
   test("keeps the home of a workspace living away from it", () => {
     const snapshot = scene({

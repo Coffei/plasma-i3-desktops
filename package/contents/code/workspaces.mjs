@@ -138,8 +138,11 @@ export function outputsChanged(model, snapshot, knownKeys) {
 }
 
 /**
- * Sends windows on another output than their workspace's location there.
+ * Sends windows on another output than their workspace's location there, and
+ * dialogs to their main window's output and workspace (spec 5.6).
  *
+ * KWin gives a new dialog the desktop of the focused output, even when it
+ * opens next to its main window on another one, where it would be hidden.
  * KWin replaces the desktop of a window it moves to an output not showing
  * it, so the desktop is set again.
  */
@@ -153,6 +156,20 @@ function gather(location, scene) {
         { type: "sendToOutput", window: window.id, output: target },
         { type: "adopt", window: window.id, desktop },
       );
+    }
+  }
+  for (const dialog of scene.dialogs) {
+    const main = scene.managed.find((window) => window.id === dialog.transientFor);
+    if (!main) {
+      continue;
+    }
+    const target = scene.nameOf[location[main.desktops[0]]] ?? main.output;
+    const desktop = main.desktops[0];
+    if (dialog.output !== target) {
+      actions.push({ type: "sendToOutput", window: dialog.id, output: target });
+    }
+    if (dialog.output !== target || dialog.desktops[0] !== desktop) {
+      actions.push({ type: "adopt", window: dialog.id, desktop });
     }
   }
   return actions;
@@ -346,6 +363,15 @@ function analyse(snapshot) {
     }
   }
   const managed = snapshot.windows.filter((window) => isManaged(window) && keyOf[window.output]);
+  // Dialogs and other transient windows, but not menus and other popups.
+  const dialogs = snapshot.windows.filter(
+    (window) =>
+      window.transientFor &&
+      !window.popupWindow &&
+      !window.deleted &&
+      !window.onAllDesktops &&
+      window.desktops.length === 1,
+  );
   const windowCounts = {};
   for (const window of managed) {
     const desktop = window.desktops[0];
@@ -362,6 +388,7 @@ function analyse(snapshot) {
     shown,
     showing,
     managed,
+    dialogs,
     windowCounts,
     focused: snapshot.activeScreen,
   };

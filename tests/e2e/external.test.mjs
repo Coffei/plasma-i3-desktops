@@ -86,3 +86,30 @@ test(
     assert.equal(locations(state)[2], "Virtual-1");
   },
 );
+
+test(
+  "a dialog opened while focus is on the other monitor appears with its window",
+  { timeout: 30000 },
+  async (t) => {
+    const kwin = await startKwin();
+    t.after(() => kwin.stop());
+    await kwin.spawnWindow("A");
+    const parent = await kwin.spawnWindow("P", { dialogAfter: 3000 });
+    await kwin.act(
+      { sendToScreen: { caption: "P", output: "Virtual-1" } },
+      { activate: "A" },
+      { shortcut: "MoveMouseToFocus" },
+    );
+    await kwin.waitFor(async () => (await kwin.state()).activeScreen === "Virtual-0");
+
+    const dialog = await kwin.waitForWindow("P dialog");
+
+    const state = await kwin.waitFor(async () => {
+      const s = await kwin.state();
+      const d = windowTitled(s, "P dialog");
+      return d.output === "Virtual-1" && desktopNumbers(s, d)[0] === 2 && s;
+    });
+    assert.equal(dialog.transientFor, parent.id);
+    assert.deepEqual(desktopNumbers(state, windowTitled(state, "P dialog")), [2]);
+  },
+);

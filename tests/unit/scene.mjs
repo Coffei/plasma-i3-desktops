@@ -30,6 +30,7 @@ export function scene({ shown, windows = [], active, desktops = 10, layout = {} 
       normalWindow: true,
       dialog: false,
       transient: false,
+      transientFor: null,
       specialWindow: false,
       desktopWindow: false,
       dock: false,
