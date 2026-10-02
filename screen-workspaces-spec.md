@@ -433,9 +433,10 @@ shown. **Decision:** clear `location` and `home` when a workspace becomes
 unmapped. i3 forgets empty workspaces too.
 
 ### 6.5 Direction → neighbour output — **decided**
-Use output geometries: candidates are outputs whose centre lies in the half-plane
-in direction D; pick the one with the largest overlap on the perpendicular axis,
-tie-break by distance between centres. No wrap-around: with no candidate, there
+Use output geometries: candidates are outputs whose centre lies beyond F's edge
+in direction D (beyond F's centre is not enough: a bigger monitor beside F can
+have its centre lower than F's); pick the one with the largest overlap on the
+perpendicular axis, tie-break by distance between centres. No wrap-around: with no candidate, there
 is no neighbour. Unit-test this with odd layouts (stacked, L-shape, different
 sizes, gaps between outputs).
 
