@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { findQtTool } from "../../tools/qt-tool.mjs";
+import { FakeInput } from "./fakeinput.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -141,6 +142,8 @@ class Kwin {
       XDG_CACHE_HOME: this.dirs.cache,
       XDG_STATE_HOME: this.dirs.state,
       QT_FORCE_STDERR_LOGGING: "1",
+      // Lets the tests move the pointer through fake input.
+      KWIN_WAYLAND_NO_PERMISSION_CHECKS: "1",
     });
   }
 
@@ -324,6 +327,12 @@ class Kwin {
     };
   }
 
+  /** Moves the pointer by (dx, dy) like a real mouse, see fakeinput.mjs. */
+  async movePointer(dx, dy) {
+    this.fakeInput ??= await FakeInput.connect(join(this.dirs.runtime, SOCKET));
+    await this.fakeInput.movePointer(dx, dy);
+  }
+
   /** Turns a virtual output off or on, as unplugging or plugging a monitor does. */
   async setOutputEnabled(name, enabled) {
     await execFileAsync("kscreen-doctor", [`output.${name}.${enabled ? "enable" : "disable"}`], {
@@ -450,6 +459,7 @@ class Kwin {
   }
 
   async stop() {
+    this.fakeInput?.close();
     for (const client of this.clients) {
       client.kill("SIGKILL");
     }

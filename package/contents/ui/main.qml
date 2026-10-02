@@ -123,9 +123,38 @@ Item {
             const desktop = desktopWithId(action.desktop);
             debug("moving window " + action.window + " to workspace " + desktop.x11DesktopNumber);
             windowWithId(action.window).desktops = [desktop];
+        } else if (action.type === "focusOutput") {
+            focusOutput(action.output, action.warp);
         } else if (action.type === "warn") {
             console.warn("plasma-i3-desktops: " + action.text);
         }
+    }
+
+    // Scripts cannot focus an output or move the pointer, but KWin's own
+    // shortcuts can (spec 6.1). "Switch to Screen" focuses the output's most
+    // recently used window of what it shows, or its desktop.
+    function focusOutput(name, warp) {
+        const index = Array.from(Workspace.screenOrder).findIndex(output => output.name === name);
+        if (index < 0 || index > 7) {
+            debug("cannot focus " + name + ", KWin only switches to screens 0 to 7");
+            return;
+        }
+        debug("focusing " + name + " and moving the pointer to its " + warp);
+        invokeKWinShortcut("Switch to Screen " + index);
+        invokeKWinShortcut(warp === "window" ? "MoveMouseToFocus" : "MoveMouseToCenter");
+    }
+
+    // Asynchronous; KWin handles calls in the order they were made.
+    function invokeKWinShortcut(shortcut) {
+        const call = kwinShortcutCall.createObject(root, {
+            arguments: [shortcut]
+        });
+        call.finished.connect(() => call.destroy());
+        call.failed.connect(() => {
+            console.warn("plasma-i3-desktops: invoking " + shortcut + " failed");
+            call.destroy();
+        });
+        call.call();
     }
 
     function desktopWithId(id) {
@@ -198,6 +227,17 @@ Item {
             const key = Outputs.outputKey(output, Array.from(Workspace.screens));
             root.workspaceModel = Workspaces.recordSwitch(root.workspaceModel, key, previous ? previous.id : null);
             root.scheduleReconcile();
+        }
+    }
+
+    Component {
+        id: kwinShortcutCall
+
+        DBusCall {
+            service: "org.kde.kglobalaccel"
+            path: "/component/kwin"
+            dbusInterface: "org.kde.kglobalaccel.Component"
+            method: "invokeShortcut"
         }
     }
 

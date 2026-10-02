@@ -10,6 +10,9 @@
 // Actions:
 //   {type: "show", desktop, output}   show a desktop on an output (by name)
 //   {type: "adopt", window, desktop}  move a window to another desktop
+//   {type: "focusOutput", output, warp}
+//                                     focus an output and move the pointer to
+//                                     the focused "window" or the output's "centre"
 //   {type: "warn", text}              something the user should know about
 
 export function emptyModel() {
@@ -123,7 +126,9 @@ export function rebuild(snapshot) {
  * Plans switching to workspace `number` from the focused output (spec 5.2).
  *
  * A workspace that lives somewhere is shown there; an unmapped one appears
- * on the focused output, and reconcile() then places it there. Nothing
+ * on the focused output, and reconcile() then places it there. Focus and
+ * pointer follow when that is another output (spec 6.1): to the workspace's
+ * window if it has a visible one there, else to the output's centre. Nothing
  * happens if the workspace does not exist or the focused output shows it.
  */
 export function switchTo(model, snapshot, number) {
@@ -136,10 +141,17 @@ export function switchTo(model, snapshot, number) {
     return [];
   }
   const target = scene.nameOf[model.location[desktop.id]] ?? scene.focused;
-  if (scene.shown[target] === desktop.id) {
-    return [];
+  const actions = [];
+  if (scene.shown[target] !== desktop.id) {
+    actions.push({ type: "show", desktop: desktop.id, output: target });
   }
-  return [{ type: "show", desktop: desktop.id, output: target }];
+  if (target !== scene.focused) {
+    const visible = scene.managed.some(
+      (w) => w.desktops[0] === desktop.id && w.output === target && !w.minimized,
+    );
+    actions.push({ type: "focusOutput", output: target, warp: visible ? "window" : "centre" });
+  }
+  return actions;
 }
 
 function locate(model, scene, desktop) {

@@ -289,6 +289,7 @@ describe("recordSwitch", () => {
 
 describe("switchTo", () => {
   const show = (desktop, output) => ({ type: "show", desktop, output });
+  const focus = (output, warp) => ({ type: "focusOutput", output, warp });
 
   test("shows an unmapped workspace on the focused output", () => {
     const snapshot = scene({ shown: { A: 1, B: 2 }, active: "B" });
@@ -296,7 +297,7 @@ describe("switchTo", () => {
     assert.deepEqual(switchTo(modelWith({ d1: "A", d2: "B" }), snapshot, 3), [show("d3", "B")]);
   });
 
-  test("shows a workspace hidden on another output there", () => {
+  test("shows a workspace hidden on another output there and focuses its window", () => {
     const snapshot = scene({
       shown: { A: 1, B: 2 },
       windows: [{ id: "w1", desktop: 4, output: "B" }],
@@ -304,13 +305,26 @@ describe("switchTo", () => {
 
     const model = modelWith({ d1: "A", d2: "B", d4: "B" });
 
-    assert.deepEqual(switchTo(model, snapshot, 4), [show("d4", "B")]);
+    assert.deepEqual(switchTo(model, snapshot, 4), [show("d4", "B"), focus("B", "window")]);
   });
 
-  test("leaves a workspace shown on another output as it is", () => {
+  test("focuses the centre of another output showing the empty workspace", () => {
     const snapshot = scene({ shown: { A: 1, B: 2 } });
 
-    assert.deepEqual(switchTo(modelWith({ d1: "A", d2: "B" }), snapshot, 2), []);
+    assert.deepEqual(switchTo(modelWith({ d1: "A", d2: "B" }), snapshot, 2), [
+      focus("B", "centre"),
+    ]);
+  });
+
+  test("focuses the centre when the workspace's only windows there are minimized", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [{ id: "w1", desktop: 2, output: "B", minimized: true }],
+    });
+
+    assert.deepEqual(switchTo(modelWith({ d1: "A", d2: "B" }), snapshot, 2), [
+      focus("B", "centre"),
+    ]);
   });
 
   test("does nothing for the workspace the focused output shows", () => {

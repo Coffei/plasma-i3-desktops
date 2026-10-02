@@ -238,8 +238,11 @@ Let W = desktop N, F = the focused output.
 1. If W is mapped and `location[W]` is connected → target T = `location[W]`.
 2. Else → T = F, and W gets `location[W] = home[W] = F`.
 3. If T does not already show W: `setCurrentDesktopForScreen(W, T)`.
-4. Focus W at T and warp the pointer (6.1): the most recently active window of
-   W if known, else the topmost; if W is empty, focus T itself.
+4. If T ≠ F, focus T and warp the pointer (6.1): KWin focuses the most
+   recently used window of W on T, and the pointer goes to its centre; if W
+   has no visible window there, to T's centre. If T = F, KWin focuses W's most
+   recently used window by itself and the pointer stays where it is, like
+   i3's `mouse_warping output`.
 5. If the workspace T showed before is now unmapped (empty and not shown),
    drop its location.
 6. **Same workspace again**: if W is already shown on F, do nothing (optionally
@@ -345,10 +348,11 @@ animation (`deleted`). Transients follow their parent (5.6).
 - So with *Click to focus*, moving the pointer to another monitor without
   clicking makes that monitor current for `Meta+N` on an empty workspace. That
   is where KWin opens the next window anyway, so this is accepted.
-- After every focus change the script makes, warp the pointer (6.1). This is
-  always on, with no config option. Without it, the next pointer move resets the
-  active output, and with *Focus follows mouse* the next window the pointer
-  enters on the old monitor takes focus back.
+- Whenever the script moves focus to another monitor, warp the pointer (6.1).
+  This is always on, with no config option. Without it, the next pointer move
+  resets the active output, and with *Focus follows mouse* the next window the
+  pointer enters on the old monitor takes focus back. Switches on the current
+  monitor leave the pointer alone (5.2).
 
 ### 5.10 Shortcuts
 Register through KWin so they appear in System Settings → Shortcuts.
@@ -366,6 +370,9 @@ desktop switching). kglobalaccel won't give our action a key that another
 action already holds, so the README must say which to unbind before enabling
 the script (or to assign ours afterwards in System Settings → Shortcuts). Do
 not silently rewrite the user's global shortcuts.
+KWin's `ShortcutHandler` assigns keys without registering them as defaults,
+so "Reset to default" in System Settings clears them; the README should say
+so.
 
 ---
 
@@ -388,10 +395,12 @@ Facts from the KWin sources:
 - With *Focus follows mouse*, desktop windows never take focus on hover
   (`src/window.cpp:2848`), so a pointer on an empty monitor changes nothing.
 
-**Decision:** whenever the script moves focus to output T:
-1. W has a window on T → activate it, then invoke `MoveMouseToFocus`.
-2. W is empty → invoke `Switch to Screen <index of T in screenOrder>`, then
-   `MoveMouseToCenter`.
+**Decision:** whenever the script moves focus to another output T, it
+invokes `Switch to Screen <index of T in screenOrder>`, which focuses the most
+recently used window of what T shows (KWin's per-screen focus chain, also for
+a window that lost focus when its workspace was hidden), or T's desktop. Then:
+1. W has a visible window on T → `MoveMouseToFocus`.
+2. Otherwise → `MoveMouseToCenter`.
 
 Both are `invokeShortcut` calls through `DBusCall`; calls on one connection
 arrive in order. This is always on (5.9). KWin only registers
