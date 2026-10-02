@@ -329,8 +329,22 @@ class Kwin {
 
   /** Moves the pointer by (dx, dy) like a real mouse, see fakeinput.mjs. */
   async movePointer(dx, dy) {
+    await (await this.input()).movePointer(dx, dy);
+  }
+
+  /** Presses or releases a mouse button (e.g. fakeinput.mjs BTN_LEFT). */
+  async pointerButton(code, pressed) {
+    await (await this.input()).button(code, pressed);
+  }
+
+  /** Presses or releases a key (e.g. fakeinput.mjs KEY_LEFTMETA). */
+  async keyboardKey(code, pressed) {
+    await (await this.input()).key(code, pressed);
+  }
+
+  async input() {
     this.fakeInput ??= await FakeInput.connect(join(this.dirs.runtime, SOCKET));
-    await this.fakeInput.movePointer(dx, dy);
+    return this.fakeInput;
   }
 
   /** Turns a virtual output off or on, as unplugging or plugging a monitor does. */

@@ -301,8 +301,10 @@ KWin opens a new window on the active output and on the desktop shown there
 the active output is the focused output and the script does not redirect new
 windows. It only enforces I3:
 1. A window that starts on a workspace located on another output (window rule,
-   app asking for a desktop) moves to that output, as in 5.7 "Window to
-   Desktop N".
+   app restoring its session) moves to that output, as in 5.7 "Window to
+   Desktop N": whenever the script re-checks its model at runtime, a managed
+   window on another output than its workspace's location is sent there and
+   given its desktop back. Focus stays where it is.
 2. Transient windows (dialogs) follow their parent's output and desktop.
 
 ### 5.7 External changes (not made by the script)
@@ -332,8 +334,8 @@ windows. It only enforces I3:
 - **User drags a window to another output, or uses "Window to Next Screen"**:
   see 6.8.
 - **User sends a window to desktop W (Plasma's "Window to Desktop N")**: if W is
-  located on another output, move the window there; if W is unmapped, W becomes
-  located on the window's current output.
+  located on another output, move the window there (5.6), focus stays; if W is
+  unmapped, W becomes located on the window's current output.
 - **Window set to all desktops**: ignore it for location purposes.
 - **Desktops added/removed/reordered in System Settings**: rebuild state from
   scratch (as at startup); ids of surviving desktops stay valid.
@@ -473,7 +475,8 @@ Options: (a) the window adopts the destination output's current workspace
 (i3 behaviour: moving a window to another monitor puts it into the workspace
 visible there); (b) pull the window back; (c) allow it and break I3.
 **Decision:** (a) for user actions. KWin already does this (§3), so the script
-only updates `location`. At startup, the workspace stays where most of its
+only updates `location`; such windows are never away from their workspace, so
+5.6 does not pull them back. At startup, the workspace stays where most of its
 windows are and stragglers adopt the workspace shown on their output.
 
 ### 6.9 Pressing the shortcut of the already-focused workspace — **decided**

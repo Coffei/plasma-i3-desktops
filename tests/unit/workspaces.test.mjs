@@ -132,6 +132,52 @@ describe("reconcile: locations", () => {
   });
 });
 
+describe("reconcile: windows", () => {
+  test("a window away from its workspace goes to where the workspace lives", () => {
+    // E.g. "Window to Desktop 2" on A, while workspace 2 lives on B.
+    const snapshot = scene({
+      shown: { A: 1, B: 3 },
+      windows: [
+        { id: "w1", desktop: 2, output: "A" },
+        { id: "w2", desktop: 2, output: "B" },
+      ],
+    });
+
+    const { actions } = reconcile(modelWith({ d1: "A", d2: "B", d3: "B" }), snapshot);
+
+    assert.deepEqual(actions, [
+      { type: "sendToOutput", window: "w1", output: "B" },
+      { type: "adopt", window: "w1", desktop: "d2" },
+    ]);
+  });
+
+  test("a window on an unused workspace makes it live where the window is", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [{ id: "w1", desktop: 5, output: "A" }],
+    });
+
+    const { model, actions } = reconcile(modelWith({ d1: "A", d2: "B" }), snapshot);
+
+    assert.equal(model.location.d5, "A");
+    assert.deepEqual(actions, []);
+  });
+
+  test("leaves unmanaged windows where they are", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 3 },
+      windows: [
+        { id: "panel", desktop: 2, output: "A", skipTaskbar: true },
+        { id: "w2", desktop: 2, output: "B" },
+      ],
+    });
+
+    const { actions } = reconcile(modelWith({ d1: "A", d2: "B", d3: "B" }), snapshot);
+
+    assert.deepEqual(actions, []);
+  });
+});
+
 describe("reconcile: homes", () => {
   test("keeps the home of a workspace living away from it", () => {
     const snapshot = scene({

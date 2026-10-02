@@ -17,6 +17,12 @@ const FAKE_INPUT = "org_kde_kwin_fake_input";
 const FAKE_INPUT_VERSION = 4;
 const FAKE_INPUT_AUTHENTICATE = 0;
 const FAKE_INPUT_POINTER_MOTION = 1;
+const FAKE_INPUT_BUTTON = 2;
+const FAKE_INPUT_KEYBOARD_KEY = 10;
+
+// Linux input event codes.
+export const KEY_LEFTMETA = 125;
+export const BTN_LEFT = 0x110;
 
 export class FakeInput {
   static async connect(socketPath) {
@@ -61,6 +67,18 @@ export class FakeInput {
   /** Moves the pointer relative to where it is, and waits until KWin has handled it. */
   async movePointer(dx, dy) {
     this.send(this.fakeInput, FAKE_INPUT_POINTER_MOTION, [fixed(dx), fixed(dy)]);
+    await this.roundtrip();
+  }
+
+  /** Presses or releases a mouse button, e.g. BTN_LEFT. */
+  async button(code, pressed) {
+    this.send(this.fakeInput, FAKE_INPUT_BUTTON, [uint(code), uint(pressed ? 1 : 0)]);
+    await this.roundtrip();
+  }
+
+  /** Presses or releases a key by its Linux key code, e.g. KEY_LEFTMETA. */
+  async key(code, pressed) {
+    this.send(this.fakeInput, FAKE_INPUT_KEYBOARD_KEY, [uint(code), uint(pressed ? 1 : 0)]);
     await this.roundtrip();
   }
 

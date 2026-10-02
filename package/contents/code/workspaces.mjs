@@ -60,9 +60,17 @@ export function recordSwitch(model, outputKey, previousDesktop) {
  * stored location while that output is connected, otherwise it lives where
  * most of its windows are; an empty, shown workspace lives where it is shown,
  * on the focused output if it is shown on several. Every output showing a
- * workspace that lives elsewhere switches to another one (spec 6.2).
+ * workspace that lives elsewhere switches to another one (spec 6.2), and
+ * windows on another output than their workspace go there (spec 5.6, 5.7),
+ * e.g. after "Window to Desktop N".
  */
 export function reconcile(model, snapshot) {
+  const result = place(model, snapshot);
+  const gathered = gather(result.model.location, analyse(snapshot));
+  return { model: result.model, actions: result.actions.concat(gathered) };
+}
+
+function place(model, snapshot) {
   const scene = analyse(snapshot);
   const location = {};
   const home = {};
@@ -126,6 +134,16 @@ export function outputsChanged(model, snapshot, knownKeys) {
     }
   }
 
+  return { model: Object.assign({}, model, { location }), actions: gather(location, scene) };
+}
+
+/**
+ * Sends windows on another output than their workspace's location there.
+ *
+ * KWin replaces the desktop of a window it moves to an output not showing
+ * it, so the desktop is set again.
+ */
+function gather(location, scene) {
   const actions = [];
   for (const window of scene.managed) {
     const desktop = window.desktops[0];
@@ -137,17 +155,17 @@ export function outputsChanged(model, snapshot, knownKeys) {
       );
     }
   }
-  return { model: Object.assign({}, model, { location }), actions };
+  return actions;
 }
 
 /**
  * Builds the model from scratch, as at startup (spec 5.1).
  *
- * Like reconcile(), and windows away from their workspace's location adopt
- * the workspace shown on their own output (spec 6.8).
+ * Like reconcile(), except that windows away from their workspace's location
+ * adopt the workspace shown on their own output instead (spec 6.8).
  */
 export function rebuild(snapshot) {
-  const { model, actions } = reconcile(emptyModel(), snapshot);
+  const { model, actions } = place(emptyModel(), snapshot);
   const scene = analyse(snapshot);
   const shown = Object.assign({}, scene.shown);
   for (const action of actions) {
