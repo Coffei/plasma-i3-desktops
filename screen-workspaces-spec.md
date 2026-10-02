@@ -130,9 +130,17 @@ there.
   window's previous output and geometry (`src/placementtracker.cpp:78`), also
   for windows the script moved in the meantime. Desktops are kept.
 
+### Verified at runtime (e2e tests `tests/e2e/kwin-*.test.mjs`)
+- **Pointer warp** (`kwin-pointer.test.mjs`): `Switch to Screen <i>` followed
+  by `MoveMouseToCenter`, sent as two `DBusCall`s, makes output i active and puts
+  the pointer at its centre, also with no windows on it. A window opened
+  afterwards lands there. Activating a window and then `MoveMouseToFocus` puts
+  the pointer at the window's centre. Without plasmashell (the e2e setup) an
+  empty output has no desktop window, so keyboard focus stays on the previous
+  window; whether a real session focuses the desktop window instead is still
+  to be checked by hand.
+
 ### Must be verified before relying on them
-- That `Switch to Screen <i>` followed by `MoveMouseToCenter` (two async D-Bus
-  calls) really lands the pointer on the target output.
 - Whether correcting a Plasma switch synchronously inside
   `currentDesktopChanged` (5.7) is flicker-free, and whether the nested signal
   it causes confuses anything else in KWin.

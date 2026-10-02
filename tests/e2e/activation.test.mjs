@@ -1,21 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { SCRIPT_ID, startKwin } from "./harness.mjs";
+import { startKwin } from "./harness.mjs";
 
 const ANY_OUTPUT = /plasma-i3-desktops:/;
 const ACTIVE = /plasma-i3-desktops: active/;
 const INACTIVE = /plasma-i3-desktops: inactive/;
-const DEBUG = { kwinrc: { [`Script-${SCRIPT_ID}`]: { Debug: true } } };
 
 test("logs nothing with debug off", { timeout: 30000 }, async (t) => {
-  const kwin = await startKwin();
+  const kwin = await startKwin({ debug: false });
   t.after(() => kwin.stop());
 
   assert.doesNotMatch(kwin.log(), ANY_OUTPUT);
 });
 
 test("logs that it is active with debug on", { timeout: 30000 }, async (t) => {
-  const kwin = await startKwin({ config: DEBUG });
+  const kwin = await startKwin();
   t.after(() => kwin.stop());
 
   await kwin.waitForLog(ACTIVE);
@@ -24,7 +23,7 @@ test("logs that it is active with debug on", { timeout: 30000 }, async (t) => {
 });
 
 test("warns when per-screen desktops are off", { timeout: 30000 }, async (t) => {
-  const kwin = await startKwin({ perOutputDesktops: false, config: DEBUG });
+  const kwin = await startKwin({ perOutputDesktops: false });
   t.after(() => kwin.stop());
 
   await kwin.waitForLog(INACTIVE);
@@ -32,7 +31,7 @@ test("warns when per-screen desktops are off", { timeout: 30000 }, async (t) => 
 });
 
 test("follows per-screen desktops being turned on and off", { timeout: 30000 }, async (t) => {
-  const kwin = await startKwin({ perOutputDesktops: false, config: DEBUG });
+  const kwin = await startKwin({ perOutputDesktops: false });
   t.after(() => kwin.stop());
   await kwin.waitForLog(INACTIVE);
 

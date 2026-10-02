@@ -8,6 +8,7 @@
 import { execFile, spawn } from "node:child_process";
 import {
   closeSync,
+  copyFileSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -18,13 +19,17 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { findQtTool } from "../../tools/qt-tool.mjs";
 
 const execFileAsync = promisify(execFile);
 
 export const SCRIPT_ID = "plasma-i3-desktops";
 const DUMP_SHORTCUT = "plasma-i3-desktops: Dump state";
 const STATE_MARKER = "PLASMA_I3_DESKTOPS_STATE ";
+const PROBE_MARKER = "PI3D_PROBE ";
 const PACKAGE_DIR = resolve(import.meta.dirname, "../../package");
+const PROBES_DIR = resolve(import.meta.dirname, "probes");
+const CLIENT_QML = resolve(import.meta.dirname, "client.qml");
 const SOCKET = "wayland-pi3d";
 // sun_path is 108 bytes including the terminating null byte.
 const MAX_SOCKET_PATH = 107;
@@ -50,13 +55,15 @@ process.on("exit", () => {
  *
  * `config` maps config file names to `{group: {key: value}}` and is merged
  * over the defaults: per-screen desktops on, 10 desktops, the script enabled
- * and animations off.
+ * and animations off. Debug is on by default, so state dumps include window
+ * captions, which is how tests find their windows.
  */
 export async function startKwin({
   outputs = 2,
   width = 1920,
   height = 1080,
   perOutputDesktops = true,
+  debug = true,
   config = {},
 } = {}) {
   const kwin = new Kwin({ outputs, width, height });
@@ -68,6 +75,7 @@ export async function startKwin({
             Windows: { PerOutputVirtualDesktops: perOutputDesktops },
             Desktops: { Number: 10, Rows: 1 },
             Plugins: { [`${SCRIPT_ID}Enabled`]: true },
+            [`Script-${SCRIPT_ID}`]: { Debug: debug },
           },
           kdeglobals: { KDE: { AnimationDurationFactor: 0 } },
         },
@@ -111,6 +119,8 @@ class Kwin {
     }
     this.logPath = join(this.base, "kwin.log");
     this.busFile = join(this.base, "bus");
+    this.clients = [];
+    this.probeCount = 0;
     this.env = { ...process.env };
     for (const key of SESSION_VARIABLES) {
       delete this.env[key];
@@ -240,6 +250,72 @@ class Kwin {
     );
   }
 
+  /**
+   * Opens a test window titled `caption` and returns it from the state dump
+   * once KWin manages it.
+   */
+  async spawnWindow(caption) {
+    const logFd = openSync(this.logPath, "a");
+    const client = spawn(findQtTool("qml", "QML_BIN"), [CLIENT_QML, "--", caption], {
+      env: {
+        ...this.env,
+        WAYLAND_DISPLAY: SOCKET,
+        QT_QPA_PLATFORM: "wayland",
+        DBUS_SESSION_BUS_ADDRESS: this.busAddress,
+      },
+      stdio: ["ignore", logFd, logFd],
+    });
+    closeSync(logFd);
+    this.clients.push(client);
+    return this.waitForWindow(caption);
+  }
+
+  async waitForWindow(caption, predicate = () => true) {
+    return this.waitFor(
+      async () => (await this.state()).windows.find((w) => w.caption === caption && predicate(w)),
+      { timeout: 10000, message: `window "${caption}" did not appear` },
+    );
+  }
+
+  /**
+   * Loads and runs a one-off KWin script from tests/e2e/probes.
+   *
+   * The probe can `import "params.mjs" as Params` to read `params`. Probes
+   * report back by logging `PI3D_PROBE <json>`, see probeMessages().
+   */
+  async runProbe(file, params = {}) {
+    const name = `pi3d-probe-${++this.probeCount}`;
+    const dir = join(this.base, "probes", name);
+    mkdirSync(dir, { recursive: true });
+    copyFileSync(join(PROBES_DIR, file), join(dir, "main.qml"));
+    writeFileSync(join(dir, "params.mjs"), `export const params = ${JSON.stringify(params)};\n`);
+    const reply = await this.dbus(
+      "org.kde.KWin",
+      "/Scripting",
+      "org.kde.kwin.Scripting.loadDeclarativeScript",
+      join(dir, "main.qml"),
+      name,
+    );
+    const id = Number(reply.match(/-?\d+/)[0]);
+    if (id < 0) {
+      throw new Error(`probe ${file} could not be loaded`);
+    }
+    await this.dbus("org.kde.KWin", `/Scripting/Script${id}`, "org.kde.kwin.Script.run");
+    return {
+      name,
+      unload: () =>
+        this.dbus("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting.unloadScript", name),
+    };
+  }
+
+  probeMessages() {
+    return this.log()
+      .split("\n")
+      .filter((line) => line.includes(PROBE_MARKER))
+      .map((line) => parseJson(line.slice(line.indexOf(PROBE_MARKER) + PROBE_MARKER.length)))
+      .filter(Boolean);
+  }
+
   stateDumps() {
     return this.log()
       .split("\n")
@@ -251,10 +327,11 @@ class Kwin {
     return readIfExists(this.logPath);
   }
 
+  /** Lines reporting QML errors in the script or in a probe. */
   qmlErrors() {
     return this.log()
       .split("\n")
-      .filter((line) => line.includes(`${SCRIPT_ID}/contents/`));
+      .filter((line) => line.includes(`${SCRIPT_ID}/contents/`) || line.includes("/probes/"));
   }
 
   async waitForLog(pattern, options = {}) {
@@ -290,6 +367,9 @@ class Kwin {
   }
 
   async stop() {
+    for (const client of this.clients) {
+      client.kill("SIGKILL");
+    }
     if (this.process) {
       this.kill("SIGTERM");
       // dbus-run-session exits first; KWin keeps writing its config while it
