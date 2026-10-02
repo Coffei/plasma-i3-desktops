@@ -119,6 +119,29 @@ export function rebuild(snapshot) {
   return { model, actions };
 }
 
+/**
+ * Plans switching to workspace `number` from the focused output (spec 5.2).
+ *
+ * A workspace that lives somewhere is shown there; an unmapped one appears
+ * on the focused output, and reconcile() then places it there. Nothing
+ * happens if the workspace does not exist or the focused output shows it.
+ */
+export function switchTo(model, snapshot, number) {
+  const desktop = snapshot.desktops[number - 1];
+  if (!desktop) {
+    return [];
+  }
+  const scene = analyse(snapshot);
+  if (scene.shown[scene.focused] === desktop.id) {
+    return [];
+  }
+  const target = scene.nameOf[model.location[desktop.id]] ?? scene.focused;
+  if (scene.shown[target] === desktop.id) {
+    return [];
+  }
+  return [{ type: "show", desktop: desktop.id, output: target }];
+}
+
 function locate(model, scene, desktop) {
   const counts = scene.windowCounts[desktop];
   const showing = scene.showing[desktop] ?? [];
@@ -163,11 +186,13 @@ function analyse(snapshot) {
     .slice()
     .sort((a, b) => (order.get(a.name) ?? Infinity) - (order.get(b.name) ?? Infinity));
   const keyOf = {};
+  const nameOf = {};
   const shown = {};
   const showing = {};
   // No `??=`: KWin's JavaScript engine is older than that.
   for (const output of outputsInOrder) {
     keyOf[output.name] = output.key;
+    nameOf[output.key] = output.name;
     if (output.desktop) {
       shown[output.name] = output.desktop;
       showing[output.desktop] = (showing[output.desktop] ?? []).concat(output.name);
@@ -184,6 +209,7 @@ function analyse(snapshot) {
   return {
     outputsInOrder,
     keyOf,
+    nameOf,
     connectedKeys: new Set(Object.values(keyOf)),
     shown,
     showing,

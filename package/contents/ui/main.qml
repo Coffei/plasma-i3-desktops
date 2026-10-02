@@ -1,5 +1,6 @@
 // Entry point of the KWin script: connects KWin to the workspace logic.
 import QtQuick
+import QtQml.Models
 import org.kde.kwin
 import "../code/outputs.mjs" as Outputs
 import "../code/snapshot.mjs" as Snapshot
@@ -15,6 +16,8 @@ Item {
     // The binding of `active` changes once while the script is created, before
     // Component.onCompleted; only later changes are real.
     property bool started: false
+
+    readonly property int workspaceCount: 10
 
     // Where workspaces live, see workspaces.mjs.
     property var workspaceModel: Workspaces.emptyModel()
@@ -37,6 +40,10 @@ Item {
     function reportActivation() {
         if (active) {
             debug("active");
+            const desktops = Workspace.desktops.length;
+            if (desktops < workspaceCount) {
+                console.warn("plasma-i3-desktops: only " + desktops + " virtual desktops; configure " + workspaceCount + " to use all workspace shortcuts");
+            }
         } else {
             console.warn("plasma-i3-desktops: inactive, enable \"Switch desktop independently for each screen\" in System Settings");
         }
@@ -77,6 +84,18 @@ Item {
         if (after !== before) {
             debug("workspaces now: " + after);
         }
+    }
+
+    // Spec 5.2, `Meta+N`.
+    function switchToWorkspace(number) {
+        if (!active) {
+            return;
+        }
+        reconcile();
+        const actions = Workspaces.switchTo(workspaceModel, takeSnapshot(), number);
+        debug("switch to workspace " + number + (actions.length ? "" : ": nothing to do"));
+        apply(actions);
+        reconcile();
     }
 
     // Window signals the model depends on; KWin drops the connections when
@@ -179,6 +198,20 @@ Item {
             const key = Outputs.outputKey(output, Array.from(Workspace.screens));
             root.workspaceModel = Workspaces.recordSwitch(root.workspaceModel, key, previous ? previous.id : null);
             root.scheduleReconcile();
+        }
+    }
+
+    Instantiator {
+        model: root.workspaceCount
+
+        delegate: ShortcutHandler {
+            required property int index
+            readonly property int number: index + 1
+
+            name: "plasma-i3-desktops: Switch to workspace " + number
+            text: "i3 Desktops: Switch to workspace " + number
+            sequence: "Meta+" + number % 10
+            onActivated: root.switchToWorkspace(number)
         }
     }
 

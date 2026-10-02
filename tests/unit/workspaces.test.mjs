@@ -6,6 +6,7 @@ import {
   rebuild,
   reconcile,
   recordSwitch,
+  switchTo,
 } from "../../package/contents/code/workspaces.mjs";
 import { applyActions, scene, shownNumbers } from "./scene.mjs";
 
@@ -283,5 +284,52 @@ describe("recordSwitch", () => {
     const model = recordSwitch(modelWith({}, { A: "d3" }), "A", null);
 
     assert.deepEqual(model.previous, { A: "d3" });
+  });
+});
+
+describe("switchTo", () => {
+  const show = (desktop, output) => ({ type: "show", desktop, output });
+
+  test("shows an unmapped workspace on the focused output", () => {
+    const snapshot = scene({ shown: { A: 1, B: 2 }, active: "B" });
+
+    assert.deepEqual(switchTo(modelWith({ d1: "A", d2: "B" }), snapshot, 3), [show("d3", "B")]);
+  });
+
+  test("shows a workspace hidden on another output there", () => {
+    const snapshot = scene({
+      shown: { A: 1, B: 2 },
+      windows: [{ id: "w1", desktop: 4, output: "B" }],
+    });
+
+    const model = modelWith({ d1: "A", d2: "B", d4: "B" });
+
+    assert.deepEqual(switchTo(model, snapshot, 4), [show("d4", "B")]);
+  });
+
+  test("leaves a workspace shown on another output as it is", () => {
+    const snapshot = scene({ shown: { A: 1, B: 2 } });
+
+    assert.deepEqual(switchTo(modelWith({ d1: "A", d2: "B" }), snapshot, 2), []);
+  });
+
+  test("does nothing for the workspace the focused output shows", () => {
+    const snapshot = scene({ shown: { A: 1, B: 2 } });
+
+    assert.deepEqual(switchTo(modelWith({ d1: "A", d2: "B" }), snapshot, 1), []);
+  });
+
+  test("does nothing for a workspace beyond the last desktop", () => {
+    const snapshot = scene({ shown: { A: 1, B: 2 }, desktops: 5 });
+
+    assert.deepEqual(switchTo(modelWith({ d1: "A", d2: "B" }), snapshot, 7), []);
+  });
+
+  test("treats a workspace living on a disconnected output as unmapped", () => {
+    const snapshot = scene({ shown: { A: 1, B: 2 } });
+
+    const model = modelWith({ d1: "A", d2: "B", d3: "C" });
+
+    assert.deepEqual(switchTo(model, snapshot, 3), [show("d3", "A")]);
   });
 });
