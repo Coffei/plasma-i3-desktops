@@ -1,0 +1,307 @@
+// Runs an isolated nested KWin (virtual backend) with the script installed.
+//
+// The approach follows HyprKwin's tests/e2e/sandbox.py (GPL-3.0,
+// github.com/DGBooth/HyprKwin), reimplemented in Node. Everything lives in a
+// temporary directory and on a private D-Bus, and the environment is scrubbed
+// of the user's session, so tests never touch the running desktop.
+
+import { execFile, spawn } from "node:child_process";
+import {
+  closeSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
+export const SCRIPT_ID = "plasma-i3-desktops";
+const PACKAGE_DIR = resolve(import.meta.dirname, "../../package");
+const SOCKET = "wayland-pi3d";
+// sun_path is 108 bytes including the terminating null byte.
+const MAX_SOCKET_PATH = 107;
+const SESSION_VARIABLES = [
+  "WAYLAND_DISPLAY",
+  "WAYLAND_SOCKET",
+  "DISPLAY",
+  "XAUTHORITY",
+  "DBUS_SESSION_BUS_ADDRESS",
+  "SESSION_MANAGER",
+  "QT_QPA_PLATFORM",
+];
+
+const running = new Set();
+process.on("exit", () => {
+  for (const kwin of running) {
+    kwin.kill("SIGKILL");
+  }
+});
+
+/**
+ * Starts a nested KWin and waits until the script is loaded.
+ *
+ * `config` maps config file names to `{group: {key: value}}` and is merged
+ * over the defaults: per-screen desktops on, 10 desktops, the script enabled
+ * and animations off.
+ */
+export async function startKwin({
+  outputs = 2,
+  width = 1920,
+  height = 1080,
+  perOutputDesktops = true,
+  config = {},
+} = {}) {
+  const kwin = new Kwin({ outputs, width, height });
+  try {
+    kwin.writeConfig(
+      mergeConfig(
+        {
+          kwinrc: {
+            Windows: { PerOutputVirtualDesktops: perOutputDesktops },
+            Desktops: { Number: 10, Rows: 1 },
+            Plugins: { [`${SCRIPT_ID}Enabled`]: true },
+          },
+          kdeglobals: { KDE: { AnimationDurationFactor: 0 } },
+        },
+        config,
+      ),
+    );
+    await kwin.installPackage();
+    await kwin.start();
+  } catch (error) {
+    await kwin.stop();
+    throw error;
+  }
+  return kwin;
+}
+
+class Kwin {
+  constructor({ outputs, width, height }) {
+    this.args = [
+      "--virtual",
+      "--no-lockscreen",
+      "--socket",
+      SOCKET,
+      "--width",
+      String(width),
+      "--height",
+      String(height),
+      "--output-count",
+      String(outputs),
+    ];
+    this.base = mkdtempSync(join(tmpdir(), "pi3d-"));
+    this.dirs = Object.fromEntries(
+      ["config", "data", "runtime", "cache", "state"].map((name) => [name, join(this.base, name)]),
+    );
+    for (const dir of Object.values(this.dirs)) {
+      mkdirSync(dir, { mode: 0o700 });
+    }
+    if (join(this.dirs.runtime, SOCKET).length > MAX_SOCKET_PATH) {
+      throw new Error(
+        `Wayland socket path under ${this.base} is too long; set TMPDIR to a shorter path`,
+      );
+    }
+    this.logPath = join(this.base, "kwin.log");
+    this.busFile = join(this.base, "bus");
+    this.env = { ...process.env };
+    for (const key of SESSION_VARIABLES) {
+      delete this.env[key];
+    }
+    Object.assign(this.env, {
+      XDG_CONFIG_HOME: this.dirs.config,
+      XDG_DATA_HOME: this.dirs.data,
+      XDG_RUNTIME_DIR: this.dirs.runtime,
+      XDG_CACHE_HOME: this.dirs.cache,
+      XDG_STATE_HOME: this.dirs.state,
+      QT_FORCE_STDERR_LOGGING: "1",
+    });
+  }
+
+  writeConfig(files) {
+    for (const [file, groups] of Object.entries(files)) {
+      const text = Object.entries(groups)
+        .map(
+          ([group, entries]) =>
+            `[${group}]\n` +
+            Object.entries(entries)
+              .map(([key, value]) => `${key}=${value}\n`)
+              .join(""),
+        )
+        .join("\n");
+      writeFileSync(join(this.dirs.config, file), text);
+    }
+  }
+
+  async installPackage() {
+    await execFileAsync("kpackagetool6", ["--type=KWin/Script", "--install", PACKAGE_DIR], {
+      env: this.env,
+    });
+  }
+
+  async start() {
+    const logFd = openSync(this.logPath, "a");
+    const kwinCommand = ["exec", "kwin_wayland", ...this.args].join(" ");
+    this.process = spawn(
+      "dbus-run-session",
+      ["--", "sh", "-c", `echo "$DBUS_SESSION_BUS_ADDRESS" > "${this.busFile}"; ${kwinCommand}`],
+      { env: this.env, detached: true, stdio: ["ignore", logFd, logFd] },
+    );
+    closeSync(logFd);
+    running.add(this);
+
+    this.busAddress = await this.waitFor(() => readIfExists(this.busFile).trim(), {
+      message: "D-Bus session did not start",
+    });
+    await this.waitFor(() => this.isScriptLoaded(), {
+      timeout: 10000,
+      message: "script was not loaded",
+    });
+    // QML errors are reported right after loading.
+    await sleep(300);
+    const errors = this.qmlErrors();
+    if (errors.length) {
+      throw new Error(`QML errors:\n${errors.join("\n")}`);
+    }
+  }
+
+  /** Calls a D-Bus method on the private bus and returns gdbus' textual result. */
+  async dbus(dest, path, method, ...args) {
+    const { stdout } = await execFileAsync("gdbus", [
+      "call",
+      "--address",
+      this.busAddress,
+      "--dest",
+      dest,
+      "--object-path",
+      path,
+      "--method",
+      method,
+      ...args.map(toGVariant),
+    ]);
+    return stdout.trim();
+  }
+
+  async isScriptLoaded() {
+    try {
+      const reply = await this.dbus(
+        "org.kde.KWin",
+        "/Scripting",
+        "org.kde.kwin.Scripting.isScriptLoaded",
+        SCRIPT_ID,
+      );
+      return reply === "(true,)";
+    } catch {
+      return false;
+    }
+  }
+
+  /** Changes a config value of the running KWin; call reconfigure() to apply it. */
+  async setConfig(file, group, key, value) {
+    await execFileAsync(
+      "kwriteconfig6",
+      ["--file", file, "--group", group, "--key", key, String(value)],
+      { env: this.env },
+    );
+  }
+
+  async reconfigure() {
+    await this.dbus("org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure");
+  }
+
+  log() {
+    return readIfExists(this.logPath);
+  }
+
+  qmlErrors() {
+    return this.log()
+      .split("\n")
+      .filter((line) => line.includes(`${SCRIPT_ID}/contents/`));
+  }
+
+  async waitForLog(pattern, options = {}) {
+    return this.waitFor(() => pattern.test(this.log()), {
+      message: `log did not match ${pattern}`,
+      ...options,
+    });
+  }
+
+  /** Polls `predicate` until it returns a truthy value, and returns that value. */
+  async waitFor(predicate, { timeout = 5000, interval = 50, message = "condition not met" } = {}) {
+    const deadline = Date.now() + timeout;
+    for (;;) {
+      const value = await predicate();
+      if (value) {
+        return value;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`${message} within ${timeout} ms\n--- KWin log ---\n${this.log()}`);
+      }
+      await sleep(interval);
+    }
+  }
+
+  /** Signals the whole process group: dbus-run-session, D-Bus and KWin. */
+  kill(signal) {
+    try {
+      process.kill(-this.process.pid, signal);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async stop() {
+    if (this.process) {
+      this.kill("SIGTERM");
+      // dbus-run-session exits first; KWin keeps writing its config while it
+      // shuts down, so wait for the whole group before removing the files.
+      const deadline = Date.now() + 5000;
+      while (this.kill(0)) {
+        if (Date.now() > deadline) {
+          this.kill("SIGKILL");
+        }
+        await sleep(50);
+      }
+      running.delete(this);
+    }
+    if (!process.env.PI3D_KEEP_TMP) {
+      rmSync(this.base, { recursive: true, force: true });
+    }
+  }
+}
+
+function mergeConfig(defaults, overrides) {
+  const merged = structuredClone(defaults);
+  for (const [file, groups] of Object.entries(overrides)) {
+    merged[file] ??= {};
+    for (const [group, entries] of Object.entries(groups)) {
+      merged[file][group] = { ...merged[file][group], ...entries };
+    }
+  }
+  return merged;
+}
+
+function toGVariant(value) {
+  if (typeof value === "string") {
+    return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+  }
+  return String(value);
+}
+
+function readIfExists(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+export function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

@@ -1,0 +1,21 @@
+{
+  "KPackageStructure": "KWin/Script",
+  "KPlugin": {
+    "Authors": [
+      {
+        "Name": "Jonas Trantina"
+      }
+    ],
+    "Category": "Window Management",
+    "Description": "i3-style workspaces: every virtual desktop lives on one monitor, and switching to it takes you there",
+    "EnabledByDefault": false,
+    "Icon": "preferences-desktop-virtual",
+    "Id": "plasma-i3-desktops",
+    "License": "GPL-3.0-or-later",
+    "Name": "i3 Desktops",
+    "Version": "0.1.0"
+  },
+  "X-Plasma-API": "declarativescript",
+  "X-Plasma-API-Minimum-Version": "6.7",
+  "X-Plasma-MainScript": "ui/main.qml"
+}

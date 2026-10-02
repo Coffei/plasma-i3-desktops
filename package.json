@@ -8,8 +8,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "format": "prettier --write \"**/*.{js,mjs,json}\"",
-    "format:check": "prettier --check \"**/*.{js,mjs,json}\""
+    "format": "prettier --write \"**/*.{js,mjs,json}\" && node tools/format-qml.mjs",
+    "format:check": "prettier --check \"**/*.{js,mjs,json}\" && node tools/format-qml.mjs --check",
+    "test:e2e": "node --test --test-concurrency=1 \"tests/e2e/*.test.mjs\""
   },
   "devDependencies": {
     "prettier": "3.9.9"
