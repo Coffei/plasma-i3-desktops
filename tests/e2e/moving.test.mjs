@@ -110,6 +110,7 @@ test("moves up and down between stacked monitors", { timeout: 30000 }, async (t)
   const kwin = await startKwin();
   t.after(() => kwin.stop());
   await kwin.setOutputPosition("Virtual-1", 0, 1080);
+  await kwin.waitForOutputsSettled();
   await kwin.spawnWindow("A");
 
   await moveAndSettle(kwin, "right");

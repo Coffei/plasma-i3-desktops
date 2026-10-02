@@ -335,6 +335,7 @@ class Kwin {
 
   /** Turns a virtual output off or on, as unplugging or plugging a monitor does. */
   async setOutputEnabled(name, enabled) {
+    this.markOutputChange();
     await execFileAsync("kscreen-doctor", [`output.${name}.${enabled ? "enable" : "disable"}`], {
       env: this.clientEnv(),
       timeout: 20000,
@@ -343,6 +344,7 @@ class Kwin {
 
   /** Moves a virtual output, e.g. below another one, through output management. */
   async setOutputPosition(name, x, y) {
+    this.markOutputChange();
     await execFileAsync("kscreen-doctor", [`output.${name}.position.${x},${y}`], {
       env: this.clientEnv(),
       timeout: 20000,
@@ -354,6 +356,24 @@ class Kwin {
       },
       { message: `${name} did not move to ${x},${y}` },
     );
+  }
+
+  markOutputChange() {
+    this.settledBefore ??= this.settledCount();
+  }
+
+  settledCount() {
+    return this.log().match(/plasma-i3-desktops: outputs settled/g)?.length ?? 0;
+  }
+
+  /** Waits until the script has handled the output changes made since the last wait. */
+  async waitForOutputsSettled() {
+    const before = this.settledBefore ?? this.settledCount();
+    await this.waitFor(() => this.settledCount() > before, {
+      timeout: 10000,
+      message: "outputs did not settle",
+    });
+    this.settledBefore = undefined;
   }
 
   /**

@@ -462,7 +462,9 @@ KWin evacuates windows from a lost output itself, docks report outputs in
 bursts, and monitors that deep-sleep may disconnect on DPMS.
 **Decision:** single debounced `screensChanged` handler (~750 ms,
 configurable); compare the *settled* output set with the last known set; never
-act on intermediate states. Log every step behind a debug flag.
+act on intermediate states. While outputs settle the script does not reconcile
+and ignores its own shortcuts; it still records switches for 6.2. Log every
+step behind a debug flag.
 
 ### 6.8 A workspace's windows on several outputs — **decided**
 Happens when the user drags a window to another monitor, uses KWin's "Window

@@ -25,6 +25,13 @@ Item {
     // Above zero while the script itself changes KWin's state.
     property int applying: 0
 
+    // While monitors come and go, KWin's state is in between; the script
+    // waits until it has settled (spec 6.7).
+    property bool settling: false
+
+    // Keys of the outputs the model was last brought in line with.
+    property var knownOutputs: []
+
     // Read on every use: KWin does not reload a script when its config
     // changes, but picks up new values whenever it re-reads its config.
     function config(key, defaultValue) {
@@ -58,22 +65,51 @@ Item {
         if (!active) {
             return;
         }
-        const result = Workspaces.rebuild(takeSnapshot());
+        const snapshot = takeSnapshot();
+        const result = Workspaces.rebuild(snapshot);
         workspaceModel = result.model;
+        knownOutputs = snapshot.outputs.map(output => output.key);
         apply(result.actions);
         debug("rebuilt: " + describeLocations());
+    }
+
+    function outputsChanging() {
+        if (!active) {
+            return;
+        }
+        if (!settling) {
+            debug("outputs changing");
+        }
+        settling = true;
+        settleTimer.interval = config("HotplugDebounceMs", 750);
+        settleTimer.restart();
+    }
+
+    function outputsSettled() {
+        settling = false;
+        if (!active) {
+            return;
+        }
+        const keys = takeSnapshot().outputs.map(output => output.key);
+        const unchanged = keys.length === knownOutputs.length && keys.every(key => knownOutputs.includes(key));
+        debug("outputs settled: " + (unchanged ? "unchanged" : keys.join(", ")));
+        if (unchanged) {
+            reconcile();
+        } else {
+            rebuild();
+        }
     }
 
     // Brings the model and KWin back in line after something else changed
     // KWin's state (spec §4). Deferred, so a burst of changes is handled once.
     function scheduleReconcile() {
-        if (active && applying === 0) {
+        if (active && applying === 0 && !settling) {
             Qt.callLater(root.reconcile);
         }
     }
 
     function reconcile() {
-        if (!active) {
+        if (!active || settling) {
             return;
         }
         const before = describeLocations();
@@ -91,6 +127,10 @@ Item {
         if (!active) {
             return;
         }
+        if (settling) {
+            debug("outputs are settling, ignoring switch to workspace " + number);
+            return;
+        }
         reconcile();
         const actions = Workspaces.switchTo(workspaceModel, takeSnapshot(), number);
         debug("switch to workspace " + number + (actions.length ? "" : ": nothing to do"));
@@ -101,6 +141,10 @@ Item {
     // Spec 5.3, `Meta+Ctrl+arrow`.
     function moveWorkspace(direction) {
         if (!active) {
+            return;
+        }
+        if (settling) {
+            debug("outputs are settling, ignoring move workspace " + direction);
             return;
         }
         reconcile();
@@ -221,9 +265,8 @@ Item {
             Qt.callLater(root.rebuild);
         }
 
-        // Until hotplug is handled (milestone 4), start over.
         function onScreensChanged() {
-            Qt.callLater(root.rebuild);
+            root.outputsChanging();
         }
 
         function onWindowAdded(window) {
@@ -244,6 +287,12 @@ Item {
             root.workspaceModel = Workspaces.recordSwitch(root.workspaceModel, key, previous ? previous.id : null);
             root.scheduleReconcile();
         }
+    }
+
+    Timer {
+        id: settleTimer
+
+        onTriggered: root.outputsSettled()
     }
 
     Component {
