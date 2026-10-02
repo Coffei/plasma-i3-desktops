@@ -300,8 +300,18 @@ class Kwin {
       stdio: ["ignore", logFd, logFd],
     });
     closeSync(logFd);
+    client.caption = caption;
     this.clients.push(client);
     return this.waitForWindow(caption);
+  }
+
+  /** Closes a window opened by spawnWindow() and waits until KWin has let go of it. */
+  async closeWindow(caption) {
+    this.clients.find((client) => client.caption === caption).kill("SIGTERM");
+    await this.waitFor(
+      async () => !(await this.state()).windows.some((w) => w.caption === caption && !w.deleted),
+      { message: `window "${caption}" did not close` },
+    );
   }
 
   /** Environment for programs that talk to the nested KWin. */

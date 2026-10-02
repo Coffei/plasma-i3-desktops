@@ -61,6 +61,7 @@ function windowData(window, includeTitles) {
     popupWindow: window.popupWindow,
     skipTaskbar: window.skipTaskbar,
     minimized: window.minimized,
+    deleted: window.deleted,
   });
 }
 

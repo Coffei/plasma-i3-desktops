@@ -5,6 +5,7 @@ import {
   isManaged,
   rebuild,
   reconcile,
+  recordSwitch,
 } from "../../package/contents/code/workspaces.mjs";
 import { applyActions, scene, shownNumbers } from "./scene.mjs";
 
@@ -35,6 +36,7 @@ describe("isManaged", () => {
     ["popupWindow", true],
     ["skipTaskbar", true],
     ["onAllDesktops", true],
+    ["deleted", true],
   ]) {
     test(`ignores windows with ${flag} ${value}`, () => {
       assert.equal(isManaged({ ...normal, [flag]: value }), false);
@@ -267,5 +269,19 @@ describe("rebuild", () => {
     const snapshot = scene({ shown: { A: 1, B: 2 } });
 
     assert.deepEqual(rebuild(snapshot).model, modelWith({ d1: "A", d2: "B" }));
+  });
+});
+
+describe("recordSwitch", () => {
+  test("remembers what an output showed before", () => {
+    const model = recordSwitch(emptyModel(), "A", "d3");
+
+    assert.deepEqual(model.previous, { A: "d3" });
+  });
+
+  test("keeps the model when there was nothing before", () => {
+    const model = recordSwitch(modelWith({}, { A: "d3" }), "A", null);
+
+    assert.deepEqual(model.previous, { A: "d3" });
   });
 });

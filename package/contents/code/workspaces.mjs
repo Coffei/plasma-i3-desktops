@@ -16,9 +16,14 @@ export function emptyModel() {
   return { location: {}, home: {}, previous: {} };
 }
 
-/** Whether `window` belongs to a workspace for location purposes (spec 5.8). */
+/**
+ * Whether `window` belongs to a workspace for location purposes (spec 5.8).
+ *
+ * Closed windows linger as deleted ones while their close animation runs.
+ */
 export function isManaged(window) {
   return (
+    !window.deleted &&
     window.normalWindow &&
     !window.transient &&
     !window.specialWindow &&
@@ -29,6 +34,15 @@ export function isManaged(window) {
     !window.onAllDesktops &&
     window.desktops.length === 1
   );
+}
+
+/** Remembers that the output keyed `outputKey` showed `previousDesktop` before (spec 6.2). */
+export function recordSwitch(model, outputKey, previousDesktop) {
+  if (!previousDesktop) {
+    return model;
+  }
+  const previous = Object.assign({}, model.previous, { [outputKey]: previousDesktop });
+  return Object.assign({}, model, { previous });
 }
 
 /**

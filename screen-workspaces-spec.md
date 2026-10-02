@@ -334,7 +334,8 @@ windows. It only enforces I3:
 Managed: normal application windows. Ignore: `specialWindow`, desktop, dock,
 panels, notifications, OSDs, KRunner, plasmashell, lock screen, popups,
 `skipTaskbar` utility windows, windows on all desktops, windows in multiple
-(but not all) desktops (6.11). Transients follow their parent (5.6).
+(but not all) desktops (6.11), closed windows still running their close
+animation (`deleted`). Transients follow their parent (5.6).
 
 ### 5.9 Focus
 - The focused output is `workspace.activeScreen`. KWin sets it on every pointer

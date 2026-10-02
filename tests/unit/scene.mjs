@@ -30,6 +30,7 @@ export function scene({ shown, windows = [], active, desktops = 10 }) {
       popupWindow: false,
       skipTaskbar: false,
       minimized: false,
+      deleted: false,
       ...rest,
     })),
     activeWindow: null,

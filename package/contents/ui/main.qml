@@ -1,6 +1,7 @@
 // Entry point of the KWin script: connects KWin to the workspace logic.
 import QtQuick
 import org.kde.kwin
+import "../code/outputs.mjs" as Outputs
 import "../code/snapshot.mjs" as Snapshot
 import "../code/workspaces.mjs" as Workspaces
 
@@ -54,6 +55,35 @@ Item {
         workspaceModel = result.model;
         apply(result.actions);
         debug("rebuilt: " + describeLocations());
+    }
+
+    // Brings the model and KWin back in line after something else changed
+    // KWin's state (spec §4). Deferred, so a burst of changes is handled once.
+    function scheduleReconcile() {
+        if (active && applying === 0) {
+            Qt.callLater(root.reconcile);
+        }
+    }
+
+    function reconcile() {
+        if (!active) {
+            return;
+        }
+        const before = describeLocations();
+        const result = Workspaces.reconcile(workspaceModel, takeSnapshot());
+        workspaceModel = result.model;
+        apply(result.actions);
+        const after = describeLocations();
+        if (after !== before) {
+            debug("workspaces now: " + after);
+        }
+    }
+
+    // Window signals the model depends on; KWin drops the connections when
+    // the window goes away.
+    function watch(window) {
+        window.desktopsChanged.connect(scheduleReconcile);
+        window.outputChanged.connect(scheduleReconcile);
     }
 
     function apply(actions) {
@@ -114,6 +144,7 @@ Item {
     }
     Component.onCompleted: {
         reportActivation();
+        Array.from(Workspace.stackingOrder).forEach(watch);
         rebuild();
         started = true;
     }
@@ -129,6 +160,25 @@ Item {
         // Until hotplug is handled (milestone 4), start over.
         function onScreensChanged() {
             Qt.callLater(root.rebuild);
+        }
+
+        function onWindowAdded(window) {
+            root.watch(window);
+            root.scheduleReconcile();
+        }
+
+        function onWindowRemoved() {
+            root.scheduleReconcile();
+        }
+
+        // Every switch, the script's own too, is remembered for spec 6.2.
+        function onCurrentDesktopChanged(previous, current, output) {
+            if (!root.active) {
+                return;
+            }
+            const key = Outputs.outputKey(output, Array.from(Workspace.screens));
+            root.workspaceModel = Workspaces.recordSwitch(root.workspaceModel, key, previous ? previous.id : null);
+            root.scheduleReconcile();
         }
     }
 
