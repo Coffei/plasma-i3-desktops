@@ -237,6 +237,48 @@ export function switchTo(model, snapshot, number) {
 }
 
 /**
+ * Plans what follows when something else, e.g. a pager or the Overview,
+ * switched output `outputName` to `desktop` (spec 5.7).
+ *
+ * A switch to a workspace living on another output is taken as asking to go
+ * there, as with switchTo(): the switched output shows another workspace
+ * again, normally its previous one (spec 6.2), the workspace is shown where
+ * it lives, and focus and pointer go there. Other switches need nothing
+ * beyond reconcile(). That includes KWin switching an output to show a window
+ * it activates there, e.g. a new dialog on the wrong desktop: reconcile()
+ * then fixes the window rather than taking focus elsewhere.
+ */
+export function followSwitch(model, snapshot, outputName, desktop) {
+  const scene = analyse(snapshot);
+  const target = scene.nameOf[model.location[desktop]];
+  if (!target || target === outputName || scene.shown[outputName] !== desktop) {
+    return [];
+  }
+  const showsWindowThere = scene.managed
+    .concat(scene.dialogs)
+    .some((w) => w.output === outputName && w.desktops[0] === desktop);
+  if (showsWindowThere) {
+    return [];
+  }
+  const shown = Object.assign({}, scene.shown, { [target]: desktop });
+  delete shown[outputName];
+  const output = scene.outputNamed[outputName];
+  const replacement = replacementFor(model, snapshot, output, model.location, shown);
+  if (!replacement) {
+    return [{ type: "warn", text: `no free workspace for ${outputName}, so it stays switched` }];
+  }
+  const actions = [{ type: "show", desktop: replacement, output: outputName }];
+  if (scene.shown[target] !== desktop) {
+    actions.push({ type: "show", desktop, output: target });
+  }
+  const visible = scene.managed.some(
+    (w) => w.desktops[0] === desktop && w.output === target && !w.minimized,
+  );
+  actions.push({ type: "focusOutput", output: target, warp: visible ? "window" : "centre" });
+  return actions;
+}
+
+/**
  * Plans moving the focused output's workspace, with its windows, to the
  * neighbouring output in `direction` (spec 5.3).
  *

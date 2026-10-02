@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   emptyModel,
+  followSwitch,
   isManaged,
   moveWorkspace,
   outputsChanged,
@@ -781,5 +782,82 @@ describe("outputsChanged", () => {
     const model = modelWith({ d1: "A", d2: "B" });
 
     assert.deepEqual(outputsChanged(model, snapshot, ["A", "B"]), { model, actions: [] });
+  });
+});
+
+describe("followSwitch", () => {
+  const show = (desktop, output) => ({ type: "show", desktop, output });
+  const focus = (output, warp) => ({ type: "focusOutput", output, warp });
+  // Workspace 1 lives on A, 2 (with a window) and 3 on B; A showed 1 before.
+  const model = modelWith({ d1: "A", d2: "B", d3: "B" }, { A: "d1" });
+  const withWindowOn2 = [{ id: "w2", desktop: 2, output: "B" }];
+
+  test("a switch to a workspace hidden on another output takes you there", () => {
+    const snapshot = scene({ shown: { A: 2, B: 3 }, windows: withWindowOn2 });
+
+    assert.deepEqual(followSwitch(model, snapshot, "A", "d2"), [
+      show("d1", "A"),
+      show("d2", "B"),
+      focus("B", "window"),
+    ]);
+  });
+
+  test("a switch to a workspace shown on another output focuses it there", () => {
+    const snapshot = scene({ shown: { A: 2, B: 2 }, windows: withWindowOn2 });
+
+    assert.deepEqual(followSwitch(model, snapshot, "A", "d2"), [
+      show("d1", "A"),
+      focus("B", "window"),
+    ]);
+  });
+
+  test("an empty workspace gets the pointer at its output's centre", () => {
+    const snapshot = scene({ shown: { A: 2, B: 2 } });
+
+    assert.deepEqual(followSwitch(model, snapshot, "A", "d2"), [
+      show("d1", "A"),
+      focus("B", "centre"),
+    ]);
+  });
+
+  test("without a previous workspace the switched output gets a free one", () => {
+    const snapshot = scene({ shown: { A: 2, B: 3 }, windows: withWindowOn2 });
+    const noPrevious = modelWith({ d2: "B", d3: "B" });
+
+    assert.deepEqual(followSwitch(noPrevious, snapshot, "A", "d2")[0], show("d1", "A"));
+  });
+
+  test("needs nothing for an unused workspace or one living on the switched output", () => {
+    assert.deepEqual(followSwitch(model, scene({ shown: { A: 5, B: 3 } }), "A", "d5"), []);
+    assert.deepEqual(followSwitch(model, scene({ shown: { A: 1, B: 3 } }), "A", "d1"), []);
+  });
+
+  test("leaves a switch KWin made to show a window there to reconcile", () => {
+    // A dialog of P (workspace 2 on B) opened on B, but with workspace 1 of
+    // the focused output A; KWin switched B to workspace 1 to activate it.
+    const snapshot = scene({
+      shown: { A: 1, B: 1 },
+      windows: [
+        { id: "P", desktop: 2, output: "B" },
+        { id: "dialog", desktop: 1, output: "B", transient: true, transientFor: "P" },
+      ],
+    });
+    const dialogModel = modelWith({ d1: "A", d2: "B" }, { B: "d2" });
+
+    assert.deepEqual(followSwitch(dialogModel, snapshot, "B", "d1"), []);
+  });
+
+  test("warns when the switched output has nothing else to show", () => {
+    const snapshot = scene({
+      shown: { A: 2, B: 2 },
+      desktops: 2,
+      windows: withWindowOn2,
+    });
+    const full = modelWith({ d1: "B", d2: "B" });
+
+    assert.deepEqual(
+      followSwitch(full, snapshot, "A", "d2").map((a) => a.type),
+      ["warn"],
+    );
   });
 });

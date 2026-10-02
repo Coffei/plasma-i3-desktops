@@ -32,6 +32,10 @@ Item {
     // Keys of the outputs the model was last brought in line with.
     property var knownOutputs: []
 
+    // Output name -> desktop id it was switched to by something else, e.g. a
+    // pager (spec 5.7); followed at the next reconcile.
+    property var pendingSwitches: ({})
+
     // Read on every use: KWin does not reload a script when its config
     // changes, but picks up new values whenever it re-reads its config.
     function config(key, defaultValue) {
@@ -116,6 +120,7 @@ Item {
         if (!active || settling) {
             return;
         }
+        followPendingSwitches();
         const before = describeLocations();
         const result = Workspaces.reconcile(workspaceModel, takeSnapshot());
         workspaceModel = result.model;
@@ -123,6 +128,18 @@ Item {
         const after = describeLocations();
         if (after !== before) {
             debug("workspaces now: " + after);
+        }
+    }
+
+    function followPendingSwitches() {
+        const pending = pendingSwitches;
+        pendingSwitches = {};
+        for (const output of Object.keys(pending)) {
+            const actions = Workspaces.followSwitch(workspaceModel, takeSnapshot(), output, pending[output]);
+            if (actions.length) {
+                debug("following a switch made elsewhere on " + output);
+                apply(actions);
+            }
         }
     }
 
@@ -289,6 +306,9 @@ Item {
             }
             const key = Outputs.outputKey(output, Array.from(Workspace.screens));
             root.workspaceModel = Workspaces.recordSwitch(root.workspaceModel, key, previous ? previous.id : null);
+            if (root.applying === 0 && !root.settling) {
+                root.pendingSwitches[output.name] = current.id;
+            }
             root.scheduleReconcile();
         }
     }

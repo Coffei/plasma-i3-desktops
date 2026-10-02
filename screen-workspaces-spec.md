@@ -322,22 +322,28 @@ windows. It only enforces I3:
   - W was unmapped → W is now located on O. KWin's result is already right;
     just record it.
   - W is located on O → nothing to do.
-  - W is located on P ≠ O → show `previous` on O again, show W on P, focus P
-    and warp the pointer. If `previous` is null (new output), pick per 6.2.
+  - W is located on P ≠ O → O shows another workspace per 6.2 (normally
+    `previous`, which `recordSwitch` remembered), W is shown on P if it is
+    hidden there, focus moves to P and the pointer is warped (6.1).
 
-  KWin can't be stopped before the switch, only corrected after it. Defer the
-  correction with `Qt.callLater`: correcting inside the handler would leave
-  other scripts (e.g. a tiling script running alongside) with the wrong desktop
-  (§3). In theory this can show a frame of W on O, or start the desktop switch
-  animation; checked by hand, no flicker is noticeable (§3).
+  KWin can't be stopped before the switch, only corrected after it. The switch
+  is queued and followed at the next reconcile, through `Qt.callLater`:
+  correcting inside the handler would leave other scripts (e.g. a tiling
+  script running alongside) with the wrong desktop (§3). In theory this can
+  show a frame of W on O, or start the desktop switch animation; checked by
+  hand, no flicker is noticeable (§3). O's replacement is chosen here, not by
+  reconcile: for an empty W shown on both O and P, reconcile's keeper rule
+  would keep it on the still-focused O.
 
   The script's own shortcut stays the main path, because it never shows W on
   the wrong output first.
 
-  KWin-internal switches need no special case. Activating a window switches
-  the window's own output to its desktop (`src/activation.cpp:313`), which is
-  already W's location. Desktop removal and activity changes trigger a full
-  rebuild.
+  KWin-internal switches are not followed. Activating a window switches the
+  window's own output to its desktop (`src/activation.cpp:313`), which is
+  normally W's location anyway. When it is not, e.g. a new dialog KWin gave
+  the focused output's desktop (5.6), O has a window on W: reconcile then
+  fixes that window and switches O back, without moving focus. Desktop
+  removal and activity changes trigger a full rebuild.
 - **User drags a window to another output, or uses "Window to Next Screen"**:
   see 6.8.
 - **User sends a window to desktop W (Plasma's "Window to Desktop N")**: if W is

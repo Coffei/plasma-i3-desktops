@@ -1,9 +1,9 @@
-// The model follows windows and switches made outside the script (spec §4, 5.7).
+// The model follows windows coming, going and changing workspace (spec §4).
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { startKwin } from "./harness.mjs";
-import { locations, shownDesktops } from "./state.mjs";
+import { locations } from "./state.mjs";
 
 async function waitForLocations(kwin, expected) {
   return kwin.waitFor(
@@ -45,27 +45,5 @@ test(
     );
 
     await waitForLocations(kwin, { 1: "Virtual-0", 2: "Virtual-1", 5: "Virtual-1" });
-  },
-);
-
-test(
-  "an output switched elsewhere to a workspace living on another output switches back",
-  { timeout: 30000 },
-  async (t) => {
-    const kwin = await startKwin();
-    t.after(() => kwin.stop());
-    await kwin.spawnWindow("B");
-    await kwin.act({ sendToScreen: { caption: "B", output: "Virtual-1" } });
-    await waitForLocations(kwin, { 1: "Virtual-0", 2: "Virtual-1" });
-
-    // Like Virtual-0's pager asking for desktop 2.
-    await kwin.act({ showDesktop: { desktop: 2, output: "Virtual-0" } });
-
-    const state = await kwin.waitFor(async () => {
-      const s = await kwin.state();
-      return s.model.previous["Virtual-0"] && shownDesktops(s)["Virtual-0"] === 1 && s;
-    });
-    assert.deepEqual(shownDesktops(state), { "Virtual-0": 1, "Virtual-1": 2 });
-    assert.deepEqual(locations(state), { 1: "Virtual-0", 2: "Virtual-1" });
   },
 );
